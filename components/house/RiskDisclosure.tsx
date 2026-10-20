@@ -6,7 +6,7 @@ export function RiskDisclosure() {
     <div className="mt-3 flex flex-col gap-3 leading-relaxed text-ink/80">
       <p>
         Trading perpetual futures is high-risk and is not suitable for everyone. With leverage of up to{" "}
-        <span className="numeric">{TRADING.maxLeverage}x</span>, a price move of about 1% against you can
+        <span className="numeric">{TRADING.maxLeverage}x</span>, a price move of less than 1% against you can
         liquidate your entire position. You can lose all of the margin you post.
       </p>
       <p>
