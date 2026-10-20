@@ -1,8 +1,17 @@
 import type { Metadata } from "next";
-import { RoomPlaceholder } from "@/components/house/RoomPlaceholder";
+import { FireplaceRoom } from "@/components/fireplace/FireplaceRoom";
+import { RoomHeader } from "@/components/house/RoomHeader";
+import { ROOMS } from "@/lib/rooms";
 
 export const metadata: Metadata = { title: "The Fireplace" };
 
+const room = ROOMS.find((r) => r.href === "/burn")!;
+
 export default function FireplacePage() {
-  return <RoomPlaceholder href="/burn" phase="Phase 4" />;
+  return (
+    <>
+      <RoomHeader room={room} />
+      <FireplaceRoom />
+    </>
+  );
 }

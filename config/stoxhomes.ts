@@ -82,3 +82,53 @@ export const SIMULATED = {
     minStakeUsdg: 5,
   },
 } as const;
+
+/**
+ * Creator-fee buyback & burn. Tunables only; secrets and per-deploy values come from env (lib/env.ts).
+ * See docs/VERIFIED_CONTRACTS.md for how each address below was confirmed.
+ */
+export const BOT = {
+  claimThresholdUsd: 100,
+  /** Share of every claim spent on buyback and burn, in bps (2000 = 20%). */
+  burnShareBps: 2000,
+  maxSlippageBps: 200,
+  minGasEth: "0.002",
+  /** Skip a claim when its gas would cost more than this share of its value. */
+  maxGasShareBps: 500,
+  /** Chainlink answer older than this is treated as unavailable. */
+  maxPriceAgeSeconds: 3 * 60 * 60,
+  /** Swap transaction deadline. */
+  swapDeadlineSeconds: 300,
+  lockTtlSeconds: 240,
+  cronIntervalMinutes: 10,
+  /** Upper bound on blocks scanned per run when looking for claims made outside the bot. */
+  maxLogScanBlocks: 50_000n,
+  /** Gas units assumed for steps that can't be estimated before the previous one lands. */
+  gasUnits: { swap: 450_000n, burn: 90_000n },
+  deadAddress: "0x000000000000000000000000000000000000dEaD",
+} as const;
+
+type Address = `0x${string}`;
+
+export type NetworkContracts = {
+  ponsFactory: Address;
+  ponsFeeEscrow: Address;
+  ponsMemeHook: Address;
+  uniswapUniversalRouter: Address;
+  uniswapV4Quoter: Address;
+  chainlinkEthUsd: Address;
+};
+
+/** Verified on robinhoodchain.blockscout.com and against Uniswap / Chainlink docs on 2026-10-20. */
+export const CONTRACTS: Record<"mainnet" | "testnet", NetworkContracts | null> = {
+  mainnet: {
+    ponsFactory: "0x7ed598bcef8bd9edd8c97a195c6d13f40801ec7e", // PonsV2LaunchFactory
+    ponsFeeEscrow: "0xd3afeb2a57f70ef218aa82451c51b2fb0416ac9e", // PonsV2FeeEscrow (= factory.feeEscrow())
+    ponsMemeHook: "0xe5e702641ea86f4ae6cc3cdaed2b886f976be044", // PonsV2MemeHook (= factory.memeHook())
+    uniswapUniversalRouter: "0x204FAca1764B154221e35c0d20aBb3c525710498", // UniversalRouter 2.1.2
+    uniswapV4Quoter: "0x8dc178efb8111bb0973dd9d722ebeff267c98f94", // V4Quoter
+    chainlinkEthUsd: "0x78F3556b67E17Df817D51Ef5a990cDaF09E8d3A9", // ETH / USD standard proxy, 8 decimals
+  },
+  // Pons V2 and Uniswap v4 are not deployed on Robinhood Chain testnet.
+  testnet: null,
+};
