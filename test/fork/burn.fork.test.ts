@@ -34,13 +34,18 @@ const FORK_URL = `http://127.0.0.1:${PORT}`;
 const DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const C = CONTRACTS.mainnet!;
 
-describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token", { timeout: 180_000 }, () => {
+describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token", { timeout: 600_000 }, () => {
   let anvil: ChildProcess;
   let client: PublicClient;
   const dev = privateKeyToAccount(DEV_KEY);
 
   beforeAll(async () => {
-    anvil = spawn("anvil", ["--fork-url", UPSTREAM, "--port", String(PORT), "--silent"], { stdio: "ignore" });
+    // Throttled with retries: the public RPC rate-limits hard.
+    anvil = spawn(
+      "anvil",
+      ["--fork-url", UPSTREAM, "--port", String(PORT), "--silent", "--retries", "15", "--fork-retry-backoff", "1500", "--compute-units-per-second", "60"],
+      { stdio: "ignore" },
+    );
     client = createPublicClient({ chain: robinhood, transport: http(FORK_URL) }) as PublicClient;
     for (let i = 0; i < 60; i++) {
       try {
@@ -120,6 +125,7 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
       startBlock: null,
       txWaitMs: 30_000,
     });
+    if (process.env.FORK_VERBOSE) console.log(result.log.join("\n"));
     expect(result.outcome, result.log.join("\n")).toBe("burned");
 
     const escrowAfter = await client.readContract({ address: C.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "balanceOf", args: [dev.address] });
@@ -135,5 +141,6 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
     expect(deadAfter - deadBefore).toBe(o.tokensBought); // dead address up by exactly the bought amount
     expect(o.burnedAmount).toBe(o.tokensBought);
     expect(devLeft).toBe(0n);
+    if (process.env.FORK_VERBOSE) console.log({ deadBefore, deadAfter, delta: deadAfter - deadBefore, tokensBought: o.tokensBought, owedWei: o.owedAmount });
   });
 });
