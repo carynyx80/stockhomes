@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { RoomHeader } from "@/components/house/RoomHeader";
 import { RiskDisclosure } from "@/components/house/RiskDisclosure";
 import { BOT, CONTRACTS, TOKEN } from "@/config/stoxhomes";
-import { tokenAddress } from "@/lib/env";
+import { feeCronIntervalMinutes, tokenAddress } from "@/lib/env";
 import { ROOMS } from "@/lib/rooms";
 
 export const metadata: Metadata = { title: "The Library" };
@@ -49,8 +49,15 @@ export default function LibraryPage() {
             <p className="mt-3 leading-relaxed text-ink/80">The trading fee schedule is published here before trading opens.</p>
             <h3 className="editorial mt-6 text-xl text-wine">Buyback and burn</h3>
             <p className="mt-2 leading-relaxed text-ink/80">
-              {TOKEN.ticker} earns creator fees on its Pons pool. An automated keeper checks every{" "}
-              <span className="numeric">{BOT.cronIntervalMinutes}</span> minutes. Once claimable fees are worth at least{" "}
+              {TOKEN.ticker} earns creator fees on its Pons pool. An automated keeper checks{" "}
+              {feeCronIntervalMinutes() >= 1440 ? (
+                "daily"
+              ) : (
+                <>
+                  every <span className="numeric">{feeCronIntervalMinutes()}</span> minutes
+                </>
+              )}
+              . Once claimable fees are worth at least{" "}
               <span className="numeric">${BOT.claimThresholdUsd}</span>, it claims them, spends{" "}
               <span className="numeric">{BOT.burnShareBps / 100}%</span> of exactly what it received buying {TOKEN.ticker}{" "}
               on the token&rsquo;s Uniswap pool, and sends every token bought to the dead address. Every burn is listed,

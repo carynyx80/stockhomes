@@ -8,7 +8,7 @@ const NICK_KEY = "stoxhomes:nickname";
 const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 /** Viewer chat: anonymous with a nickname, rate-limited and filtered server-side, with a report button. */
-export function Chat({ slug, messages, onSent }: { slug: string; messages: PublicChat[]; onSent: (m: PublicChat) => void }) {
+export function Chat({ slug, enabled, messages, onSent }: { slug: string; enabled: boolean; messages: PublicChat[]; onSent: (m: PublicChat) => void }) {
   const [nickname, setNickname] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +88,9 @@ export function Chat({ slug, messages, onSent }: { slug: string; messages: Publi
           </li>
         ))}
       </ol>
+      {!enabled ? (
+        <p className="mt-3 border-t border-sand pt-3 text-xs text-ink/60">The gallery opens once the house database is connected.</p>
+      ) : (
       <form onSubmit={send} className="mt-3 flex flex-col gap-2 border-t border-sand pt-3">
         <label className="sr-only" htmlFor="chat-nick">
           Nickname
@@ -122,6 +125,7 @@ export function Chat({ slug, messages, onSent }: { slug: string; messages: Publi
           {error}
         </p>
       </form>
+      )}
     </section>
   );
 }

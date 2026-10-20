@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 /** Every agent, for the Corridor. */
 export async function GET() {
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const now = Date.now();
   const agents = await Promise.all((await oh.store.listAgents()).map((a) => agentCard(oh, a, now)));
   return NextResponse.json(

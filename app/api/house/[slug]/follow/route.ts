@@ -9,9 +9,12 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const agent = await oh.store.getAgent(slug);
   if (!agent) return NextResponse.json({ error: "No such room." }, { status: 404 });
+  if (!oh.interactive) {
+    return NextResponse.json({ error: "Chat and follows open once the house database is connected." }, { status: 503 });
+  }
 
   const body = (await req.json().catch(() => ({}))) as { followerKey?: unknown };
   const key = typeof body.followerKey === "string" && /^[\w-]{8,64}$/.test(body.followerKey) ? body.followerKey : null;

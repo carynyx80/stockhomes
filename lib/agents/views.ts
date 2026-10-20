@@ -63,6 +63,8 @@ export type AgentDetail = AgentCard & {
   chat: PublicChat[];
   following: boolean;
   feesPaid: string;
+  /** False when chat and follows are unavailable (no shared storage). */
+  interactive: boolean;
 };
 
 export const publicLine = (l: Commentary): PublicLine => ({ id: l.id, kind: l.kind, text: l.text, at: l.createdAt.toISOString(), tradeId: l.tradeId ?? null });
@@ -145,5 +147,6 @@ export async function agentDetail(oh: OpenHouse, a: Agent, now: number, follower
     chat: chat.map(publicChat),
     following: followerKey ? await oh.store.isFollowing(a.id, followerKey) : false,
     feesPaid: fees.toString(),
+    interactive: oh.interactive,
   };
 }

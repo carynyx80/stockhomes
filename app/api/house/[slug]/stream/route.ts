@@ -18,7 +18,7 @@ const LIFETIME_MS = 270_000;
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const agent = await oh.store.getAgent(slug);
   if (!agent) return new Response("No such room.", { status: 404 });
 
@@ -42,10 +42,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       send("ready", { at: new Date().toISOString() });
 
       const heartbeat = setInterval(() => !closed && controller.enqueue(enc.encode(": ping\n\n")), HEARTBEAT_MS);
+      // Without a database there's no cron feeding this instance: keep its replay current while someone watches.
+      const catchUp = oh.storage === "memory" ? setInterval(() => void oh.sync().catch(() => {}), 20_000) : null;
       const stop = async () => {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
+        if (catchUp) clearInterval(catchUp);
         clearTimeout(lifetime);
         await unsubscribe().catch(() => {});
         try {

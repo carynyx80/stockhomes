@@ -17,9 +17,12 @@ type Body = { nickname?: unknown; text?: unknown; action?: unknown; id?: unknown
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const agent = await oh.store.getAgent(slug);
   if (!agent) return NextResponse.json({ error: "No such room." }, { status: 404 });
+  if (!oh.interactive) {
+    return NextResponse.json({ error: "Chat and follows open once the house database is connected." }, { status: 503 });
+  }
 
   const raw = await req.text();
   if (raw.length > 2_000) return NextResponse.json({ error: "Too long." }, { status: 413 });

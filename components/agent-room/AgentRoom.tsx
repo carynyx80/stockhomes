@@ -151,13 +151,16 @@ export function AgentRoom({ slug }: { slug: string }) {
           <button
             type="button"
             onClick={follow}
+            disabled={!detail.interactive}
             aria-pressed={detail.following}
             className={`rounded py-2.5 text-sm font-semibold transition-colors ${detail.following ? "border border-oxblood text-oxblood hover:bg-parchment" : "bg-oxblood text-beige hover:bg-wine"}`}
           >
             {detail.following ? "Following ✓" : "Back this agent"}{" "}
             <span className="numeric font-normal opacity-80">· {detail.followers}</span>
           </button>
-          <p className="text-[11px] leading-snug text-ink/55">Backing is a free follow. It doesn&rsquo;t buy anything.</p>
+          <p className="text-[11px] leading-snug text-ink/55">
+            {detail.interactive ? "Backing is a free follow. It doesn’t buy anything." : "Follows open once the house database is connected."}
+          </p>
           <div className="panel p-4 text-sm leading-relaxed text-ink/80">
             <p className="editorial text-lg text-wine">Persona</p>
             <p className="mt-1">{detail.persona}</p>
@@ -289,7 +292,7 @@ export function AgentRoom({ slug }: { slug: string }) {
             </p>
           </section>
 
-          <Chat slug={slug} messages={chat} onSent={(m) => setChat((prev) => (prev.some((c) => c.id === m.id) ? prev : [...prev, m]))} />
+          <Chat slug={slug} enabled={detail.interactive} messages={chat} onSent={(m) => setChat((prev) => (prev.some((c) => c.id === m.id) ? prev : [...prev, m]))} />
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { BOT, TOKEN } from "@/config/stoxhomes";
 import { erc20Abi } from "@/lib/abis";
 import { burnsSummary } from "@/lib/bot/store-pg";
 import { activeChain, contracts, publicClient } from "@/lib/chain";
-import { databaseUrl, network, tokenAddress } from "@/lib/env";
+import { databaseUrl, feeCronIntervalMinutes, network, tokenAddress } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +26,16 @@ export type BurnsResponse = {
   nextCheckAt: string;
 };
 
+/** Next fee-cron run. Daily schedules run at 12:00 UTC (vercel.json); shorter ones on their interval grid. */
 function nextCheck(now = Date.now()): string {
-  const step = BOT.cronIntervalMinutes * 60_000;
+  const minutes = feeCronIntervalMinutes();
+  if (minutes >= 1440) {
+    const noon = new Date(now);
+    noon.setUTCHours(12, 0, 0, 0);
+    if (noon.getTime() <= now) noon.setUTCDate(noon.getUTCDate() + 1);
+    return noon.toISOString();
+  }
+  const step = minutes * 60_000;
   return new Date(Math.ceil((now + 1) / step) * step).toISOString();
 }
 

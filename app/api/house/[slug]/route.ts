@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const agent = await oh.store.getAgent(slug);
   if (!agent) return NextResponse.json({ error: "No such room." }, { status: 404 });
 

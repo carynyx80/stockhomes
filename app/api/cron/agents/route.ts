@@ -16,7 +16,7 @@ export const maxDuration = 300;
 export async function GET(req: NextRequest) {
   if (!cronAuthorised(req)) return NextResponse.json({ error: "unauthorised" }, { status: 401 });
   const oh = openHouse();
-  await oh.ready;
+  await oh.sync();
   const opts = { dailyBudgetUsd: oh.settings.dailyBudgetUsd, tickMinutes: oh.settings.tickMinutes, limit: AGENTS.maxTicksPerRun };
 
   // `?agent=<slug>` ticks one agent now, due or not (still under its lock). For operators and tests.
@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     if (!agent) return NextResponse.json({ error: "No such agent." }, { status: 404 });
     return NextResponse.json({ brain: oh.brain.name, storage: oh.storage, ticks: [await tickAgent(oh, agent.id, new Date(), opts)] });
   }
+
+  // Without a database, sync() above already advanced the deterministic replay to this minute.
+  if (oh.storage === "memory") return NextResponse.json({ brain: oh.brain.name, storage: oh.storage, ticks: [] });
 
   const ticks = await runDue(oh, new Date(), opts);
   return NextResponse.json({ brain: oh.brain.name, storage: oh.storage, ticks });

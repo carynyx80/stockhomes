@@ -92,6 +92,9 @@ export function openHouseSettings() {
   };
 }
 
+/** How often the fee cron runs (vercel.json). Drives the Fireplace "next check" countdown. */
+export const feeCronIntervalMinutes = () => Math.max(1, int("FEE_CRON_INTERVAL_MINUTES", BOT.cronIntervalMinutes));
+
 export const cronSecret = () => str("CRON_SECRET");
 export const databaseUrl = () => str("DATABASE_URL");
 export const redisConfig = () => {
