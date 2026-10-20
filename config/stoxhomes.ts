@@ -30,7 +30,7 @@ export const TRADING = {
  * Review this list with counsel before launch.
  */
 export const GEO = {
-  restrictedRoutes: ["/trade", "/vault", "/wars"],
+  restrictedRoutes: ["/trade", "/vault", "/wars", "/house", "/api/house"],
   blockedCountries: [
     "US", // United States
     "GB", // United Kingdom

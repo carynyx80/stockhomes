@@ -136,7 +136,16 @@ export type Snapshot = {
   wars: WarsState;
 };
 
-export interface DataSource {
+/**
+ * The trading half of a DataSource, per account. The browser's paper account and each Open House agent's
+ * account both implement it, so agents trade through exactly the calls the UI uses.
+ */
+export interface TradingAccount {
+  openPosition(req: OpenPositionRequest): Promise<Position>;
+  closePosition(positionId: string): Promise<ClosedTrade>;
+}
+
+export interface DataSource extends TradingAccount {
   readonly mode: DataMode;
   readonly markets: readonly Market[];
 

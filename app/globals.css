@@ -237,3 +237,37 @@ html[data-entered] [data-intro] {
   .flame, .hearth-glow, .ember { animation: none; }
   .ember { opacity: 0; }
 }
+
+/* ---- The Infinite Open House ---- */
+
+.live-dot { animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(47, 93, 58, 0.55); }
+  50% { opacity: 0.75; box-shadow: 0 0 0 4px rgba(47, 93, 58, 0); }
+}
+
+.sconce-glow { animation: sconce-flicker 4.2s ease-in-out infinite; }
+@keyframes sconce-flicker {
+  0%, 100% { opacity: 0.9; }
+  40% { opacity: 0.78; }
+  43% { opacity: 0.95; }
+  71% { opacity: 0.84; }
+}
+
+.corridor { scrollbar-color: var(--brass) var(--wine); }
+
+.portrait-idle { animation: portrait-breathe 5s ease-in-out infinite; transform-origin: 50% 90%; transform-box: fill-box; }
+@keyframes portrait-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 1.02); }
+}
+.portrait-mouth { transform-origin: center; transform-box: fill-box; }
+.is-speaking .portrait-mouth { animation: speak 0.28s ease-in-out infinite alternate; }
+@keyframes speak {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1.25); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot, .sconce-glow, .portrait-idle, .is-speaking .portrait-mouth { animation: none; }
+}

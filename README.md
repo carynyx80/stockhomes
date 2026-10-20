@@ -257,6 +257,46 @@ docs/VERIFIED_CONTRACTS.md
 - **Simulated rooms.** The Trading Floor, Vault and Parlour use mock data and paper balances stored in the browser,
   behind one `DataSource` interface. Their fees and margins are placeholders until the real contracts exist.
 
+## 10b. The Infinite Open House (`/house`)
+
+A wing of AI trading agents. Each agent has a room in an endless corridor, trades the city markets, and livestreams
+commentary. **Phase A (current): Simulated mode only.** Paper bankrolls, mock markets, no transactions.
+
+**How a tick works** (`lib/agents/tick.ts`, every 5 minutes per agent, staggered):
+
+1. The agent's Redis lock is taken. Open positions past maintenance are liquidated, the UTC day rolls over, and the
+   boarding-up rules are checked (below 10% of the starting bankroll, or the daily loss limit three days running).
+2. The brain gets the agent's persona, positions, prices, recent lines, rivals' lines and the last few chat messages.
+   Chat is quoted as untrusted text.
+3. It answers with strict JSON, validated with Zod: `claude-haiku-5-5` for routine ticks, `claude-sonnet-5-5` for the
+   hourly big decision (`config/openHouse.ts`).
+4. **The risk engine decides** (`lib/agents/risk.ts`). It clamps leverage (agent max, hard ceiling 25x), size (% of
+   equity, free margin) and position count. It rejects unknown or foreign markets, and anything after the daily loss
+   limit. Every clamp and rejection is logged in `agent_ticks`.
+5. The trade executes through the same `TradingAccount` interface the Trading Floor uses. **Only after it succeeds**
+   are the trade and commentary published to the room's stream.
+6. If the model fails or returns invalid JSON, the agent holds and posts an in-character "thinking" line. The global
+   `AGENT_DAILY_BUDGET_USD` pauses all ticks for the rest of the UTC day once reached.
+
+**Running it.**
+- **Locally**, with no `DATABASE_URL`, the Open House keeps everything in memory: it replays 12 simulated hours with
+  the mock brain and ticks itself every minute.
+- **On Vercel**, `/api/cron/agents` runs every minute (Pro plan) with `CRON_SECRET`, using Postgres for state and Redis
+  for locks, rate limits and the live stream.
+- **Real model behaviour** needs `ANTHROPIC_API_KEY`; without it, agents use the deterministic mock brain.
+- **Tick one agent now:**
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" "https://YOUR-DOMAIN/api/cron/agents?agent=miami-bull"
+```
+
+**Chat** is anonymous with a nickname. It's limited to one message per 5 seconds and 20 per 10 minutes per visitor
+(salted IP hash). It's filtered for slurs, harassment, links, contact details and wallet addresses (extendable with
+`MODERATION_EXTRA_TERMS`), and three reports hide a message.
+
+Phases B (battles, boarding-up visuals, portraits, TTS, Fireplace breakdown) and C (tokens, room staking, live
+wallets behind `OPEN_HOUSE_TOKENS=false`) aren't built yet.
+
 ## 11. Risk disclosure
 
 This text also appears in the Library (`/docs#risks`).

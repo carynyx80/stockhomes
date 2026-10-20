@@ -4,7 +4,7 @@ import { motion, useAnimate, useMotionValue, useReducedMotion, useSpring } from 
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { hasEntered, markEntered } from "@/lib/entry";
-import { DoorLeaf } from "./DoorLeaf";
+import { SwingingDoor } from "@/components/door/SwingingDoor";
 import { Facade } from "./Facade";
 import { DOOR, DOOR_ORIGIN, SIGN, SPILL } from "./geometry";
 import { loadSoundPref, playKnock, saveSoundPref } from "./knock";
@@ -20,7 +20,11 @@ function timeScale(): number {
 }
 
 function focusInside() {
-  requestAnimationFrame(() => document.getElementById("inside")?.focus({ preventScroll: true }));
+  requestAnimationFrame(() => {
+    // React's effect cleanup also removes `inert`, but possibly after this frame; focus fails inside an inert tree.
+    document.querySelector("[data-house]")?.removeAttribute("inert");
+    document.getElementById("inside")?.focus({ preventScroll: true });
+  });
 }
 
 /**
@@ -169,27 +173,7 @@ export function HouseIntro() {
           }}
         />
 
-        <div className="absolute" style={DOOR}>
-          <div
-            data-glow
-            aria-hidden
-            className="absolute inset-0 opacity-0"
-            style={{
-              background: "radial-gradient(ellipse at 50% 62%, #F6E7C4 0%, #E9C98A 30%, var(--brass) 55%, var(--wine) 100%)",
-            }}
-          />
-          <button
-            type="button"
-            aria-label="Enter Stoxhomes"
-            onClick={enter}
-            aria-disabled={entering}
-            className="door group absolute inset-0 cursor-pointer [perspective:900px]"
-          >
-            <motion.span data-leaf className="door-leaf absolute inset-0 block origin-left">
-              <DoorLeaf />
-            </motion.span>
-          </button>
-        </div>
+        <SwingingDoor label="Enter Stoxhomes" onActivate={enter} disabled={entering} style={DOOR} />
 
         <p
           aria-hidden

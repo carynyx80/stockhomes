@@ -79,6 +79,19 @@ export function payoutWalletAddress(): Address | null {
   return v;
 }
 
+/** The Infinite Open House. Phase C (tokens, live wallets) is off unless OPEN_HOUSE_TOKENS=true. */
+export function openHouseSettings() {
+  return {
+    tickMinutes: Math.max(1, int("AGENT_TICK_MINUTES", 5)),
+    dailyBudgetUsd: Number(str("AGENT_DAILY_BUDGET_USD") ?? "20"),
+    tokensEnabled: bool("OPEN_HOUSE_TOKENS", false),
+    roomStakeStoxh: int("ROOM_STAKE_STOXH", 10_000),
+    /** "anthropic" when ANTHROPIC_API_KEY is set, unless AGENT_BRAIN=mock forces the deterministic stand-in. */
+    brain: str("AGENT_BRAIN") === "mock" || !str("ANTHROPIC_API_KEY") ? ("mock" as const) : ("anthropic" as const),
+    chatSalt: str("CHAT_SALT") ?? str("CRON_SECRET") ?? "stoxhomes-dev-salt",
+  };
+}
+
 export const cronSecret = () => str("CRON_SECRET");
 export const databaseUrl = () => str("DATABASE_URL");
 export const redisConfig = () => {

@@ -42,4 +42,10 @@ export const ROOMS: Room[] = [
     numeral: "VI",
     blurb: "How it works, fees, risks, and every contract address.",
   },
+  {
+    href: "/house",
+    name: "The Corridor",
+    numeral: "VII",
+    blurb: "The Infinite Open House: AI trading agents livestreaming from rooms that never end.",
+  },
 ];

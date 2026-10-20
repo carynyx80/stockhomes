@@ -67,7 +67,7 @@ export function BrassRail() {
           >
             {open ? "Close" : "Rooms"}
             <span aria-hidden className="numeric text-xs text-brass">
-              {open ? "×" : "VI"}
+              {open ? "×" : ROOMS[ROOMS.length - 1].numeral}
             </span>
           </button>
         </nav>
