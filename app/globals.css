@@ -1,26 +1,131 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --beige: #f2e8d5;
+  --parchment: #e6d6b8;
+  --sand: #cdb48e;
+  --oxblood: #7a0f17;
+  --wine: #4e0a0f;
+  --brass: #b08a4a;
+  --ink: #1e1412;
+  --long: #2f5d3a;
+  --short: #b3261e;
+
+  /* Fractal-noise paper grain, tinted ink. Rendered at ~4% opacity over the page. */
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .12 0 0 0 0 .08 0 0 0 0 .07 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-beige: var(--beige);
+  --color-parchment: var(--parchment);
+  --color-sand: var(--sand);
+  --color-oxblood: var(--oxblood);
+  --color-wine: var(--wine);
+  --color-brass: var(--brass);
+  --color-ink: var(--ink);
+  --color-long: var(--long);
+  --color-short: var(--short);
+
+  --font-display: var(--font-gloock), Georgia, serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-bricolage), system-ui, sans-serif;
+  --font-mono: var(--font-martian), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--beige);
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--beige);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background-image: var(--grain);
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+}
+
+::selection {
+  background: var(--oxblood);
+  color: var(--beige);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 3px;
+}
+
+@layer components {
+  /* Gloock: big and tight. */
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: -0.035em;
+    line-height: 0.92;
+  }
+
+  /* Fraunces italic with the soft, wonky axes turned up: room names and editorial accents. */
+  .editorial {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-variation-settings: "SOFT" 100, "WONK" 1;
+  }
+
+  /* Every number. */
+  .numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .panel {
+    background: var(--parchment);
+    border: 1px solid var(--sand);
+    border-radius: 6px;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--beige) 60%, transparent),
+      0 1px 0 color-mix(in srgb, var(--wine) 12%, transparent);
+  }
+
+  .btn-oxblood {
+    background: var(--oxblood);
+    color: var(--beige);
+    border-radius: 4px;
+    padding: 0.65rem 1.1rem;
+    font-weight: 600;
+    transition: background-color 150ms ease;
+  }
+  .btn-oxblood:hover {
+    background: var(--wine);
+  }
+  .btn-oxblood:active {
+    background: var(--wine);
+    transform: translateY(1px);
+  }
+
+  .rule {
+    height: 1px;
+    background: var(--sand);
+    border: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
