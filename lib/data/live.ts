@@ -18,7 +18,7 @@ import { UI_SLIPPAGE_BPS, type ExchangeDeployment } from "@/config/exchange";
 import { priceOracleAbi, stoxhomesPerpsAbi, stoxhomesVaultAbi, testUSDGAbi } from "@/lib/exchange/abis";
 import { BrowserWallet } from "@/lib/exchange/wallet";
 import { feeOf } from "@/lib/perp/math";
-import { MARKETS } from "@/lib/sim/markets";
+import { EXCHANGE_MARKETS } from "@/lib/sim/markets";
 import { createSimulatedSource } from "./simulated";
 import type {
   Account,
@@ -26,9 +26,11 @@ import type {
   DataSource,
   HistoryRange,
   OpenPositionRequest,
+  OrderRequest,
   Position,
   PricePoint,
   Quote,
+  RestingOrder,
   Snapshot,
   VaultHolding,
   VaultStats,
@@ -46,6 +48,8 @@ const SHARE_UNIT = 10n ** 12n; // vault shares: 6 asset decimals + 6 offset deci
 const SHARE_SCALE = 10n ** 6n; // shown to the UI in 6-decimal units, like the simulated vault
 const LOG_CHUNK = 50_000n;
 const key = (id: string): Hex => stringToHex(id, { size: 32 });
+/** +30% gas over the estimate. */
+export const withHeadroom = (estimate: bigint) => (estimate * 13n) / 10n;
 
 const FRIENDLY: Record<string, string> = {
   HoldTimeNotMet: "Positions must be held at least a minute before closing.",
@@ -62,6 +66,13 @@ const FRIENDLY: Record<string, string> = {
   ERC4626ExceededMaxWithdraw: "That's more than the Vault can release right now.",
   ERC4626ExceededMaxRedeem: "That's more than the Vault can release right now.",
   EnforcedPause: "Trading is paused. You can still close positions.",
+  BadTriggers: "Take-profit must be on the winning side of the price and stop-loss on the losing side.",
+  TriggerNotMet: "That order's trigger hasn't been reached yet.",
+  TooManyOrders: "You can have at most 25 resting orders. Cancel one first.",
+  WouldBreachMargin: "That would leave the position over 100x or too close to liquidation.",
+  NoOrder: "That order no longer exists. It may have filled.",
+  NoPosition: "Position not found. It may have been closed or liquidated.",
+  NotOwner: "That isn't your position.",
 };
 
 function friendly(err: unknown): Error {
@@ -81,7 +92,9 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
   const client = createPublicClient({ chain, transport: http(rpc ?? chain.rpcUrls.default.http[0], { retryCount: 2 }) }) as PublicClient;
   const wallet = new BrowserWallet(chain);
   const paper = createSimulatedSource(); // City Wars only
-  const markets = MARKETS.filter((m) => dep.markets.includes(m.id));
+  const markets = EXCHANGE_MARKETS.filter((m) => dep.markets.includes(m.id));
+  const byKey = new Map(markets.map((m) => [key(m.id).toLowerCase(), m.id]));
+  const idOfKey = (k: Hex) => byKey.get(k.toLowerCase()) ?? "?";
   const symbol = dep.usdgHasFaucet ? "tUSDG" : "USDG";
 
   const listeners = new Set<() => void>();
@@ -128,24 +141,18 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
     }
   };
 
+  let longChanges: Record<string, { d30Bps: number; y1Bps: number }> = {};
   async function refreshChange24h() {
     if (Date.now() - lastChangeFetch < 10 * 60_000 && Object.keys(change24h).length) return;
     lastChangeFetch = Date.now();
-    const out: Record<string, number> = {};
-    await Promise.all(
-      markets.map(async (m) => {
-        try {
-          const r = await fetch(`/api/exchange/history?market=${m.id}&range=1D`);
-          const body = (await r.json()) as { points: { price: number }[] };
-          const a = body.points[0]?.price;
-          const b = body.points.at(-1)?.price;
-          if (a && b) out[m.id] = Math.round((b / a - 1) * 10_000);
-        } catch {
-          // leave it out
-        }
-      }),
-    );
-    change24h = out;
+    try {
+      const r = await fetch("/api/exchange/changes");
+      const body = (await r.json()) as { changes: Record<string, { d1Bps: number; d30Bps: number; y1Bps: number }> };
+      change24h = Object.fromEntries(Object.entries(body.changes).map(([id, c]) => [id, c.d1Bps]));
+      longChanges = Object.fromEntries(Object.entries(body.changes).map(([id, c]) => [id, { d30Bps: c.d30Bps, y1Bps: c.y1Bps }]));
+    } catch {
+      lastChangeFetch = 0; // retry on the next poll
+    }
   }
 
   /** Closed and liquidated positions for the wallet, from contract events. */
@@ -156,15 +163,38 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
     const head = await client.getBlockNumber();
     const opened = new Map<string, { market: string; isLong: boolean; collateral: bigint; size: bigint; price: bigint }>();
     const closed: ClosedTrade[] = [];
+    const triggered = new Map<string, boolean>(); // position id → take-profit (true) or stop-loss (false)
     for (let from = dep.fromBlock; from <= head; from += LOG_CHUNK) {
       const to = from + LOG_CHUNK - 1n > head ? head : from + LOG_CHUNK - 1n;
       const logs = await client.getLogs({ address: dep.perps, fromBlock: from, toBlock: to });
       for (const log of logs) {
         try {
           const ev = decodeEventLog({ abi: stoxhomesPerpsAbi, data: log.data, topics: log.topics });
+          if (ev.eventName === "TriggerExecuted") triggered.set(ev.args.id.toString(), ev.args.takeProfit);
+          if (ev.eventName === "PositionDecreased" && ev.args.owner.toLowerCase() === owner.toLowerCase()) {
+            const o = opened.get(ev.args.id.toString());
+            if (!o) continue;
+            const share = (o.collateral * ev.args.sizeDelta) / o.size;
+            const fee = feeOf(ev.args.sizeDelta, SIMULATED.openFeeBps);
+            closed.push({
+              id: `${ev.args.id}-${log.blockNumber}-${log.logIndex}`,
+              marketId: o.market,
+              side: o.isLong ? "long" : "short",
+              leverage: Math.round(Number(o.size) / Number(o.collateral)),
+              collateral: share,
+              notional: ev.args.sizeDelta,
+              entryPrice: o.price,
+              exitPrice: ev.args.price,
+              realisedPnl: ev.args.paidOut - share - fee,
+              closedAt: Number(log.blockNumber),
+              reason: "partial",
+            });
+            o.collateral -= share;
+            o.size -= ev.args.sizeDelta;
+          }
           if (ev.eventName === "PositionOpened" && ev.args.owner.toLowerCase() === owner.toLowerCase()) {
             opened.set(ev.args.id.toString(), {
-              market: markets.find((m) => key(m.id) === ev.args.market)?.id ?? "?",
+              market: idOfKey(ev.args.market),
               isLong: ev.args.isLong,
               collateral: ev.args.collateral,
               size: ev.args.size,
@@ -179,14 +209,19 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
               id: ev.args.id.toString(),
               marketId: o.market,
               side: o.isLong ? "long" : "short",
-              leverage: Number(o.size / o.collateral),
+              leverage: o.collateral > 0n ? Math.round(Number(o.size) / Number(o.collateral)) : 0,
               collateral: o.collateral,
               notional: o.size,
               entryPrice: o.price,
               exitPrice: ev.args.price,
               realisedPnl: ev.eventName === "PositionClosed" ? ev.args.paidOut - o.collateral - feeOf(o.size, SIMULATED.openFeeBps) : -(o.collateral + feeOf(o.size, SIMULATED.openFeeBps)),
               closedAt: Number(block), // block number: event logs don't carry timestamps
-              reason: ev.eventName === "PositionClosed" ? "closed" : "liquidated",
+              reason:
+                ev.eventName === "PositionLiquidated"
+                  ? "liquidated"
+                  : triggered.has(ev.args.id.toString())
+                    ? triggered.get(ev.args.id.toString()) ? "take-profit" : "stop-loss"
+                    : "closed",
             });
           }
         } catch {
@@ -239,15 +274,50 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
         let account: Account = { balance: 0n, positions: [], history: [] };
         let holding: VaultHolding = { shares: 0n, costBasis: 0n };
         if (owner) {
-          const [bal, shares, ids] = await client.multicall({
+          const [bal, shares, ids, orderIdsRaw] = await client.multicall({
             allowFailure: false,
             contracts: [
               { address: dep.usdg, abi: testUSDGAbi, functionName: "balanceOf", args: [owner] },
               { address: dep.vault, abi: stoxhomesVaultAbi, functionName: "balanceOf", args: [owner] },
               { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "positionsOf", args: [owner] },
+              { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "ordersOf", args: [owner] },
             ],
           });
           const idList = ids as readonly bigint[];
+          const orderIdList = orderIdsRaw as readonly bigint[];
+          const orderViews = orderIdList.length
+            ? await client.multicall({
+                allowFailure: false,
+                contracts: orderIdList.map((id) => ({ address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "order", args: [id] }) as const),
+              })
+            : [];
+          const orders: RestingOrder[] = orderIdList.map((id, i) => {
+            const o = orderViews[i] as {
+              market: Hex;
+              isLong: boolean;
+              triggerAbove: boolean;
+              leverage: number;
+              collateral: bigint;
+              triggerPrice: bigint;
+              takeProfit: bigint;
+              stopLoss: bigint;
+              createdAt: bigint;
+            };
+            return {
+              id: id.toString(),
+              marketId: idOfKey(o.market),
+              side: o.isLong ? "long" : "short",
+              // A long that waits for a lower price is a limit; one that waits for a higher price is a stop.
+              type: o.isLong !== o.triggerAbove ? "limit" : "stop",
+              triggerPrice: o.triggerPrice,
+              collateral: o.collateral,
+              leverage: Number(o.leverage),
+              notional: o.collateral * BigInt(o.leverage),
+              takeProfit: o.takeProfit > 0n ? o.takeProfit : null,
+              stopLoss: o.stopLoss > 0n ? o.stopLoss : null,
+              createdAt: Number(o.createdAt) * 1000,
+            };
+          });
           const details = idList.length
             ? await client.multicall({
                 allowFailure: false,
@@ -258,12 +328,24 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
               })
             : [];
           const positions: Position[] = idList.map((id, i) => {
-            const p = details[2 * i] as { market: Hex; isLong: boolean; collateral: bigint; size: bigint; entryPrice: bigint; openedAt: bigint };
+            const p = details[2 * i] as {
+              market: Hex;
+              isLong: boolean;
+              collateral: bigint;
+              size: bigint;
+              entryPrice: bigint;
+              openedAt: bigint;
+              takeProfit: bigint;
+              stopLoss: bigint;
+            };
             return {
               id: id.toString(),
-              marketId: markets.find((m) => key(m.id) === p.market)?.id ?? "?",
+              marketId: idOfKey(p.market),
               side: p.isLong ? "long" : "short",
-              leverage: Number(p.size / p.collateral),
+              // Effective leverage: changes when margin is added or removed.
+              leverage: Math.max(1, Math.round(Number(p.size) / Number(p.collateral))),
+              takeProfit: p.takeProfit > 0n ? p.takeProfit : null,
+              stopLoss: p.stopLoss > 0n ? p.stopLoss : null,
               collateral: p.collateral,
               notional: p.size,
               entryPrice: p.entryPrice,
@@ -273,7 +355,7 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
             };
           });
           await refreshHistory(owner).catch(() => {});
-          account = { balance: bal as bigint, positions, history };
+          account = { balance: bal as bigint, positions, history, orders };
           holding = { shares: (shares as bigint) / SHARE_SCALE, costBasis: readBasis(owner) };
         }
 
@@ -321,7 +403,9 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
   async function write(w: Signer, req: { address: Address; abi: readonly unknown[]; functionName: string; args?: readonly unknown[] }): Promise<Hex> {
     const call = { account: w.account, address: req.address, abi: req.abi, functionName: req.functionName, args: req.args ?? [] } as Parameters<PublicClient["simulateContract"]>[0];
     const { request } = await client.simulateContract(call);
-    return w.wallet.writeContract({ ...(request as Parameters<typeof w.wallet.writeContract>[0]), chain });
+    // Headroom over the estimate: closes delete storage, and the refund makes a bare estimate run out of gas.
+    const gas = withHeadroom(await client.estimateContractGas(call as Parameters<PublicClient["estimateContractGas"]>[0]));
+    return w.wallet.writeContract({ ...(request as Parameters<typeof w.wallet.writeContract>[0]), gas, chain });
   }
 
   async function ensureAllowance(w: Awaited<ReturnType<BrowserWallet["client"]>>, spender: Address, needed: bigint) {
@@ -329,6 +413,11 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
     if (allowance >= needed) return;
     const hash = await write(w, { address: dep.usdg, abi: testUSDGAbi, functionName: "approve", args: [spender, needed] });
     await client.waitForTransactionReceipt({ hash });
+  }
+
+  async function confirm(hash: Hex) {
+    const r = await client.waitForTransactionReceipt({ hash });
+    if (r.status !== "success") throw new Error("The transaction reverted.");
   }
 
   const markOf = (marketId: string) => {
@@ -395,17 +484,20 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
           })
       : undefined,
 
-    openPosition({ marketId, side, collateral, leverage }: OpenPositionRequest) {
+    openPosition({ marketId, side, collateral, leverage, takeProfit, stopLoss }: OpenPositionRequest) {
       return send(async (w) => {
         const mark = markOf(marketId);
         const fee = feeOf(collateral * BigInt(leverage), SIMULATED.openFeeBps);
         await ensureAllowance(w, dep.perps, collateral + fee);
         const acceptable = side === "long" ? (mark * BigInt(10_000 + UI_SLIPPAGE_BPS)) / 10_000n : (mark * BigInt(10_000 - UI_SLIPPAGE_BPS)) / 10_000n;
+        const withTriggers = !!(takeProfit || stopLoss);
         const hash = await write(w, {
           address: dep.perps,
           abi: stoxhomesPerpsAbi,
-          functionName: "open",
-          args: [key(marketId), side === "long", collateral, BigInt(leverage), acceptable],
+          functionName: withTriggers ? "openWithTriggers" : "open",
+          args: withTriggers
+            ? [key(marketId), side === "long", collateral, BigInt(leverage), acceptable, takeProfit ?? 0n, stopLoss ?? 0n]
+            : [key(marketId), side === "long", collateral, BigInt(leverage), acceptable],
         });
         const receipt = await client.waitForTransactionReceipt({ hash });
         if (receipt.status !== "success") throw new Error("The transaction reverted.");
@@ -467,6 +559,60 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
         }
         throw new Error("Closed, but the close event wasn't found.");
       });
+    },
+
+    placeOrder({ marketId, side, collateral, leverage, type, triggerPrice, takeProfit, stopLoss }: OrderRequest) {
+      return send(async (w) => {
+        const fee = feeOf(collateral * BigInt(leverage), SIMULATED.openFeeBps);
+        await ensureAllowance(w, dep.perps, collateral + fee);
+        // Long limit waits for the price to fall to the trigger; long stop for it to rise. Shorts mirror that.
+        const triggerAbove = (side === "long") === (type === "stop");
+        await confirm(
+          await write(w, {
+            address: dep.perps,
+            abi: stoxhomesPerpsAbi,
+            functionName: "placeOrder",
+            args: [key(marketId), side === "long", collateral, BigInt(leverage), triggerPrice, triggerAbove, takeProfit ?? 0n, stopLoss ?? 0n],
+          }),
+        );
+      });
+    },
+
+    cancelOrder(orderId) {
+      return send(async (w) => confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "cancelOrder", args: [BigInt(orderId)] })));
+    },
+
+    decreasePosition(positionId, fractionBps) {
+      return send(async (w) => {
+        const pos = snapshot.account.positions.find((p) => p.id === positionId);
+        if (!pos) throw new Error("Position not found. It may have been liquidated.");
+        const mark = markOf(pos.marketId);
+        const acceptable = pos.side === "long" ? (mark * BigInt(10_000 - UI_SLIPPAGE_BPS)) / 10_000n : (mark * BigInt(10_000 + UI_SLIPPAGE_BPS)) / 10_000n;
+        const sizeDelta = fractionBps >= 10_000 ? maxUint256 : (pos.notional * BigInt(fractionBps)) / 10_000n;
+        await confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "decrease", args: [BigInt(positionId), sizeDelta, acceptable] }));
+      });
+    },
+
+    addMargin(positionId, amount) {
+      return send(async (w) => {
+        await ensureAllowance(w, dep.perps, amount);
+        await confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "addCollateral", args: [BigInt(positionId), amount] }));
+      });
+    },
+
+    removeMargin(positionId, amount) {
+      return send(async (w) => confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "removeCollateral", args: [BigInt(positionId), amount] })));
+    },
+
+    setTriggers(positionId, takeProfit, stopLoss) {
+      return send(async (w) =>
+        confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "setTriggers", args: [BigInt(positionId), takeProfit ?? 0n, stopLoss ?? 0n] })),
+      );
+    },
+
+    async getChanges() {
+      await refreshChange24h();
+      return longChanges;
     },
 
     deposit(amount) {

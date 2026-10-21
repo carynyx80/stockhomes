@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ORACLE_MARKETS } from "@/config/oracle";
+import { ORACLE_MARKETS, SOURCE_LABEL } from "@/config/oracle";
 import { observations } from "@/lib/keeper/setup";
 import { marketPriceAt } from "@/lib/oracle/price";
 
@@ -20,12 +20,13 @@ export async function GET(req: NextRequest) {
   const market = ORACLE_MARKETS.find((m) => m.id === id);
   if (!market) return NextResponse.json({ error: "Unknown market." }, { status: 404 });
   const obs = (await observations())[id];
+  if (!obs?.length) return NextResponse.json({ error: "No readings for this market right now." }, { status: 503 });
   const now = Date.now();
   const points: { t: number; price: number }[] = [];
   for (let t = now - range.span; t < now; t += range.step) points.push({ t, price: marketPriceAt(market, obs, t) });
   points.push({ t: now, price: marketPriceAt(market, obs, now) });
   return NextResponse.json(
-    { market: id, source: market.source.label, latestReading: obs.at(-1), points },
+    { market: id, source: SOURCE_LABEL[market.source.kind], latestReading: obs.at(-1), points },
     { headers: { "cache-control": "public, s-maxage=600, stale-while-revalidate=3600" } },
   );
 }

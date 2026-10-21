@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export type ChartPoint = { t: number; v: number };
 
+/** A labelled horizontal level (entry, liquidation, take-profit…). Off-chart levels show as an edge arrow. */
+export type ChartGuide = { v: number; label: string; color: string };
+
 type Props = {
   points: ChartPoint[] | null;
   label: string;
@@ -12,6 +15,7 @@ type Props = {
   formatTick?: (v: number) => string;
   formatTime: (t: number) => string;
   height?: number;
+  guides?: ChartGuide[];
 };
 
 const PAD = { top: 16, right: 76, bottom: 28, left: 4 };
@@ -27,7 +31,7 @@ function niceStep(range: number, count: number) {
  * Single-series line chart: 2px oxblood line, 10% wash, hairline grid, crosshair and tooltip on
  * hover/focus (arrow keys move it), end label, and a table view.
  */
-export function LineChart({ points, label, formatValue, formatTick = formatValue, formatTime, height = 300 }: Props) {
+export function LineChart({ points, label, formatValue, formatTick = formatValue, formatTime, height = 300, guides = [] }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
   const [hover, setHover] = useState<number | null>(null);
@@ -136,6 +140,20 @@ export function LineChart({ points, label, formatValue, formatTick = formatValue
               </text>
             ))}
             <path d={geo.area} fill="var(--oxblood)" fillOpacity=".08" />
+            {guides.map((g) => {
+              const gy = geo.y(g.v);
+              const inside = gy >= PAD.top && gy <= PAD.top + geo.ih;
+              const yy = Math.min(PAD.top + geo.ih - 2, Math.max(PAD.top + 10, gy));
+              return (
+                <g key={`${g.label}${g.v}`}>
+                  {inside && <line x1={PAD.left} x2={PAD.left + geo.iw} y1={gy} y2={gy} stroke={g.color} strokeWidth="1.25" strokeDasharray="5 4" />}
+                  <text x={PAD.left + 4} y={inside ? gy - 4 : yy} className="text-[10px] font-semibold" fill={g.color}>
+                    {inside ? "" : gy < PAD.top ? "↑ " : "↓ "}
+                    {g.label} {formatTick(g.v)}
+                  </text>
+                </g>
+              );
+            })}
             <path d={geo.line} fill="none" stroke="var(--oxblood)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
             {last && !active && (
               <circle cx={geo.x(last.t)} cy={geo.y(last.v)} r="4" fill="var(--oxblood)" stroke="var(--beige)" strokeWidth="2" />

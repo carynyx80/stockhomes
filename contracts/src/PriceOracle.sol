@@ -43,6 +43,15 @@ contract PriceOracle is Ownable2Step {
     }
 
     function configureFeed(bytes32 market, uint16 maxDeviationBps, uint32 maxAge, bool enabled) external onlyOwner {
+        _configure(market, maxDeviationBps, maxAge, enabled);
+    }
+
+    /// @notice Configure many feeds with the same settings in one transaction.
+    function configureFeeds(bytes32[] calldata markets, uint16 maxDeviationBps, uint32 maxAge, bool enabled) external onlyOwner {
+        for (uint256 i; i < markets.length; ++i) _configure(markets[i], maxDeviationBps, maxAge, enabled);
+    }
+
+    function _configure(bytes32 market, uint16 maxDeviationBps, uint32 maxAge, bool enabled) private {
         if (maxDeviationBps == 0 || maxDeviationBps > 5_000 || maxAge == 0) revert BadConfig();
         Feed storage f = feeds[market];
         f.maxDeviationBps = maxDeviationBps;

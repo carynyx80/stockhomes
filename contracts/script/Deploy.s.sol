@@ -8,21 +8,34 @@ import {StoxhomesVault} from "../src/StoxhomesVault.sol";
 import {StoxhomesPerps} from "../src/StoxhomesPerps.sol";
 import {TestUSDG} from "../src/testnet/TestUSDG.sol";
 
-/// @notice Deploys oracle, Vault and exchange and lists the six city markets.
+/// @notice Deploys oracle, Vault and exchange and lists the city markets.
 ///
 /// Env:
+///   MARKETS          comma-separated market ids (config/markets.generated.ts); default nyc,mia,lax,lon
 ///   USDG_ADDRESS     settlement token (leave empty on testnet to deploy TestUSDG with a public faucet)
+///   USDG_MINTABLE    testnet: true if USDG_ADDRESS is a TestUSDG the deployer owns (so the Vault can be seeded)
 ///   OWNER            admin (use a multisig for anything real)
 ///   TREASURY         receives the treasury share of trading fees (for the $STOXH buyback)
 ///   PUBLISHER        oracle publisher (the price keeper)
-///   INITIAL_PRICES   comma-separated 8-decimal opening prices for nyc,mia,lax,lon (from the oracle keeper)
+///   INITIAL_PRICES   comma-separated 8-decimal opening prices, one per market (from the oracle keeper)
 ///   SEED_VAULT_USDG  testnet only: tUSDG (whole units) to mint and deposit into the Vault
 ///
 ///   forge script script/Deploy.s.sol --rpc-url robinhood_testnet --broadcast --account <keystore>
 /// Mainnet only after an audit, with the owner role on a multisig.
 contract Deploy is Script {
-    /// Only cities with a live price source (config/oracle.ts). Dubai and Lagos stay simulated until sourced.
-    bytes32[4] internal MARKETS = [bytes32("nyc"), "mia", "lax", "lon"];
+    function markets() internal view returns (bytes32[] memory ids) {
+        string[] memory def = new string[](4);
+        def[0] = "nyc";
+        def[1] = "mia";
+        def[2] = "lax";
+        def[3] = "lon";
+        string[] memory names = vm.envOr("MARKETS", ",", def);
+        ids = new bytes32[](names.length);
+        for (uint256 i; i < names.length; ++i) {
+            require(bytes(names[i]).length > 0 && bytes(names[i]).length <= 31, "market id must be 1-31 bytes");
+            ids[i] = bytes32(bytes(names[i]));
+        }
+    }
 
     function params() internal pure returns (StoxhomesPerps.MarketParams memory) {
         // Placeholders: confirm before mainnet.
@@ -33,7 +46,7 @@ contract Deploy is Script {
             maintenanceBps: 50,
             liquidationFeeBps: 10,
             borrowBpsPerDay: 1,
-            maxOiBps: 1_000,
+            maxOiBps: 2_000,
             reserveBps: 1_000
         });
     }
@@ -45,8 +58,13 @@ contract Deploy is Script {
         address publisher = vm.envOr("PUBLISHER", deployer);
         address usdgAddr = vm.envOr("USDG_ADDRESS", address(0));
 
+        bytes32[] memory ids = markets();
         vm.startBroadcast();
         TestUSDG testUsdg;
+        if (usdgAddr != address(0) && vm.envOr("USDG_MINTABLE", false)) {
+            require(block.chainid != 4663, "test USDG is testnet only");
+            testUsdg = TestUSDG(usdgAddr);
+        }
         if (usdgAddr == address(0)) {
             require(block.chainid != 4663, "refusing to deploy a test USDG on mainnet");
             testUsdg = new TestUSDG(owner);
@@ -64,21 +82,16 @@ contract Deploy is Script {
         oracle.setPublisher(publisher, true);
         perps.setTreasury(treasury, 5_000);
         perps.setLimits(10e6, 60);
-        for (uint256 i; i < MARKETS.length; ++i) {
-            // Housing indices move slowly: at most 1% per post, and a price older than a day is refused.
-            oracle.configureFeed(MARKETS[i], 100, 1 days, true);
-            perps.listMarket(MARKETS[i], params());
-        }
+        // Housing indices move slowly: at most 1% per post, and a price older than two days is refused
+        // (the keeper runs daily).
+        oracle.configureFeeds(ids, 100, 2 days, true);
+        perps.listMarkets(ids, params());
 
         uint256[] memory prices = vm.envOr("INITIAL_PRICES", ",", new uint256[](0));
-        if (prices.length == MARKETS.length) {
-            bytes32[] memory ms = new bytes32[](MARKETS.length);
-            uint128[] memory ps = new uint128[](MARKETS.length);
-            for (uint256 i; i < MARKETS.length; ++i) {
-                ms[i] = MARKETS[i];
-                ps[i] = uint128(prices[i]);
-            }
-            if (publisher == deployer) oracle.post(ms, ps);
+        if (prices.length == ids.length && publisher == deployer) {
+            uint128[] memory ps = new uint128[](ids.length);
+            for (uint256 i; i < ids.length; ++i) ps[i] = uint128(prices[i]);
+            oracle.post(ids, ps);
         }
 
         uint256 seed = vm.envOr("SEED_VAULT_USDG", uint256(0));

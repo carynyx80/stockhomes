@@ -1,6 +1,6 @@
 import type { OracleMarket } from "@/config/oracle";
 
-/** One monthly reading: "YYYY-MM" and the index value. */
+/** One monthly reading: "YYYY-MM" and the value (USD for Zillow, GBP for UK HPI). */
 export type Observation = { month: string; value: number };
 
 const monthStart = (month: string, plusMonths = 0) => {
@@ -13,15 +13,14 @@ export function sortObservations(obs: Observation[]): Observation[] {
 }
 
 /**
- * The USD price of a market at time t: anchored index, glided linearly between readings.
+ * The USD price of a market at time t: reading × scale, glided linearly between readings.
  * Reading m is fully reflected at the start of month m + lag; before the first point the first price holds,
  * after the last point the last price holds.
  */
-export function marketPriceAt(market: Pick<OracleMarket, "anchorMonth" | "anchorUsd" | "lagMonths">, obs: Observation[], t: number): number {
+export function marketPriceAt(market: Pick<OracleMarket, "scale" | "lagMonths">, obs: Observation[], t: number): number {
   const sorted = sortObservations(obs);
-  const anchor = sorted.find((o) => o.month === market.anchorMonth);
-  if (!anchor) throw new Error(`no reading for anchor month ${market.anchorMonth}`);
-  const points = sorted.map((o) => ({ t: monthStart(o.month, market.lagMonths), price: (market.anchorUsd * o.value) / anchor.value }));
+  if (!sorted.length) throw new Error("no readings");
+  const points = sorted.map((o) => ({ t: monthStart(o.month, market.lagMonths), price: o.value * market.scale }));
   if (t <= points[0].t) return points[0].price;
   for (let i = 1; i < points.length; i++) {
     if (t <= points[i].t) {

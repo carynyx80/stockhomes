@@ -5,32 +5,29 @@ import { robinhood, robinhoodTestnet } from "viem/chains";
 import { EXCHANGE } from "@/config/exchange";
 import { ORACLE_MARKETS } from "@/config/oracle";
 import { network, rpcUrl } from "@/lib/env";
-import { fetchSource } from "@/lib/oracle/sources";
+import { fetchAllObservations } from "@/lib/oracle/sources";
 import type { Observation } from "@/lib/oracle/price";
 import type { KeeperDeps } from "./keeper";
 
 /**
- * Readings change monthly: cached per server instance for an hour. Each source is fetched independently (with one
- * retry), so a slow or failing source only skips its own market, and the last good readings are kept.
+ * Readings change monthly: cached per server instance for an hour. Each source (one Zillow CSV, one UK HPI query)
+ * is fetched independently with one retry, so a failing source only skips its own markets, and the last good
+ * readings are kept.
  */
 let cache: { at: number; data: Record<string, Observation[]> } = { at: 0, data: {} };
+let pending: Promise<Record<string, Observation[]>> | null = null;
 
 export async function observations(): Promise<Record<string, Observation[]>> {
   if (Date.now() - cache.at < 3_600_000 && Object.keys(cache.data).length === ORACLE_MARKETS.length) return cache.data;
-  const fetchOne = async (m: (typeof ORACLE_MARKETS)[number]) => {
-    try {
-      return await fetchSource(m.source);
-    } catch {
-      return await fetchSource(m.source);
-    }
-  };
-  const results = await Promise.allSettled(ORACLE_MARKETS.map(fetchOne));
-  const data = { ...cache.data };
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled" && r.value.length) data[ORACLE_MARKETS[i].id] = r.value;
-  });
-  cache = { at: Date.now(), data };
-  return data;
+  pending ??= fetchAllObservations(ORACLE_MARKETS)
+    .then((fresh) => {
+      cache = { at: Date.now(), data: { ...cache.data, ...fresh } };
+      return cache.data;
+    })
+    .finally(() => {
+      pending = null;
+    });
+  return pending;
 }
 
 export type KeeperSetup = { ok: true; deps: KeeperDeps; dryRun: boolean } | { ok: false; message: string };
@@ -56,5 +53,5 @@ export async function setupKeeper(): Promise<KeeperSetup> {
   const account = privateKeyToAccount(key);
   const wallet = dryRun ? null : createWalletClient({ account, chain, transport });
 
-  return { ok: true, dryRun, deps: { client, wallet, account: account.address, deployment, observations: await observations() } };
+  return { ok: true, dryRun, deps: { client, wallet, account: account.address, deployment, markets: ORACLE_MARKETS, observations: await observations() } };
 }

@@ -1,27 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { marketPriceAt, nextPost, toOracleUnits, type Observation } from "./price";
-import { parseFredCsv } from "./sources";
+import { parseZillowCsv } from "./sources";
 
-const m = { anchorMonth: "2025-01", anchorUsd: 800_000, lagMonths: 4 };
+const m = { scale: 1, lagMonths: 3 };
 const obs: Observation[] = [
-  { month: "2025-01", value: 300 },
-  { month: "2025-02", value: 303 },
-  { month: "2025-03", value: 300 },
+  { month: "2025-01", value: 800_000 },
+  { month: "2025-02", value: 808_000 },
+  { month: "2025-03", value: 800_000 },
 ];
 const at = (y: number, mo: number, d = 1) => Date.UTC(y, mo - 1, d);
 
 describe("oracle price model", () => {
-  it("anchors the anchor month to the anchor value, reflected `lag` months later", () => {
-    expect(marketPriceAt(m, obs, at(2025, 5))).toBe(800_000);
-    expect(marketPriceAt(m, obs, at(2025, 6))).toBeCloseTo(808_000, 6); // +1%
-    expect(marketPriceAt(m, obs, at(2025, 7))).toBeCloseTo(800_000, 6);
+  it("reflects each reading `lag` months later", () => {
+    expect(marketPriceAt(m, obs, at(2025, 4))).toBe(800_000);
+    expect(marketPriceAt(m, obs, at(2025, 5))).toBe(808_000);
+    expect(marketPriceAt(m, obs, at(2025, 6))).toBe(800_000);
+  });
+
+  it("scales readings to USD", () => {
+    expect(marketPriceAt({ scale: 1.33, lagMonths: 4 }, obs, at(2025, 6))).toBeCloseTo(808_000 * 1.33, 6);
   });
 
   it("glides linearly between readings, so prices never jump", () => {
-    const mid = (at(2025, 5) + at(2025, 6)) / 2;
+    const mid = (at(2025, 4) + at(2025, 5)) / 2;
     expect(marketPriceAt(m, obs, mid)).toBeCloseTo(804_000, 3);
-    let prev = marketPriceAt(m, obs, at(2025, 5));
-    for (let t = at(2025, 5); t <= at(2025, 7); t += 3_600_000) {
+    let prev = marketPriceAt(m, obs, at(2025, 4));
+    for (let t = at(2025, 4); t <= at(2025, 6); t += 3_600_000) {
       const p = marketPriceAt(m, obs, t);
       expect(Math.abs(p / prev - 1)).toBeLessThan(0.0005); // < 0.05% per hour
       prev = p;
@@ -30,11 +34,11 @@ describe("oracle price model", () => {
 
   it("holds flat before the first and after the last point", () => {
     expect(marketPriceAt(m, obs, at(2020, 1))).toBe(800_000);
-    expect(marketPriceAt(m, obs, at(2030, 1))).toBeCloseTo(800_000, 6);
+    expect(marketPriceAt(m, obs, at(2030, 1))).toBe(800_000);
   });
 
-  it("refuses to price without the anchor month", () => {
-    expect(() => marketPriceAt(m, obs.slice(1), at(2025, 6))).toThrow(/anchor/);
+  it("refuses to price without readings", () => {
+    expect(() => marketPriceAt(m, [], at(2025, 6))).toThrow(/no readings/);
   });
 
   it("walks big gaps in steps the oracle accepts", () => {
@@ -45,10 +49,18 @@ describe("oracle price model", () => {
     expect(nextPost(0n, toOracleUnits(5), 90)).toBe(toOracleUnits(5));
   });
 
-  it("parses FRED's CSV, skipping missing values", () => {
-    expect(parseFredCsv("observation_date,NYXRSA\n2026-06-01,348.57\n2026-07-01,.\n2026-08-01,350.8\n")).toEqual([
-      { month: "2026-06", value: 348.57 },
-      { month: "2026-08", value: 350.8 },
-    ]);
+  it("parses Zillow's metro CSV for the wanted regions, from 2024 on, skipping blanks", () => {
+    const csv = [
+      "RegionID,SizeRank,RegionName,RegionType,StateName,2023-12-31,2024-01-31,2024-02-29,2024-03-31",
+      '102001,0,United States,country,,1,2,3,4',
+      '394913,1,"New York, NY",msa,NY,700000,710000.5,,720000',
+      '394463,3,"Chicago, IL",msa,IL,300000,301000,302000,303000',
+    ].join("\n");
+    expect(parseZillowCsv(csv, new Set([394913]))).toEqual({
+      394913: [
+        { month: "2024-01", value: 710000.5 },
+        { month: "2024-03", value: 720000 },
+      ],
+    });
   });
 });

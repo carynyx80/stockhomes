@@ -1,6 +1,9 @@
+import { CATALOGUE } from "./markets";
+
 /**
  * The Stoxhomes exchange contracts (contracts/). Addresses are public, not secrets.
- * Testnet deployment of 2026-10-20 (Robinhood Chain testnet, 46630); see docs/VERIFIED_CONTRACTS.md.
+ * Testnet deployment v2 of 2026-10-21 (Robinhood Chain testnet, 46630): 100 city markets, limit/stop orders,
+ * take-profit/stop-loss, partial closes and margin withdrawal. See docs/VERIFIED_CONTRACTS.md.
  * Mainnet: none. The contracts must be audited first, with the owner role on a multisig.
  */
 
@@ -24,14 +27,29 @@ export const EXCHANGE: Record<"testnet" | "mainnet", ExchangeDeployment | null> 
     chainId: 46630,
     usdg: "0xE33f794eD0ebC1009bb7277835C2830F8C9d74A1",
     usdgHasFaucet: true,
-    oracle: "0x7ddbbe04dD07e8765F21eE30a5281D7100aE3159",
-    vault: "0x73e615e2558DA1Bbd5da735Dcc07967541A965F2",
-    perps: "0x69A9d5D11834c3c1417e1f1C9534Bd0dA64e0648",
-    fromBlock: 139_678_022n,
-    markets: ["nyc", "mia", "lax", "lon"],
+    oracle: "0x2b67155A19419E35c78072D6e8AECfCB8549ef26",
+    vault: "0x369A37EC6054c19Ab4908fE3C00Acabd6B6104f3",
+    perps: "0xbaB5921C739b02e9520B2B97038c3698257dAd0f",
+    fromBlock: 139_711_406n,
+    markets: CATALOGUE.map((m) => m.id),
   },
   mainnet: null,
 };
+
+/**
+ * Market parameters the contracts were deployed with (contracts/script/Deploy.s.sol), for previews in the UI.
+ * The contracts are the source of truth; these only drive estimates.
+ */
+export const EXCHANGE_PARAMS = {
+  maxLeverage: 100,
+  openFeeBps: 6,
+  closeFeeBps: 6,
+  maintenanceBps: 50,
+  borrowBpsPerDay: 1,
+  minCollateral: 10,
+  minHoldSeconds: 60,
+  maxOrdersPerOwner: 25,
+} as const;
 
 /** Slippage allowance on the oracle price when opening and closing from the UI. */
 export const UI_SLIPPAGE_BPS = 50;

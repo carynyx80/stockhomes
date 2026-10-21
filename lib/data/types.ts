@@ -39,6 +39,25 @@ export type Position = {
   liquidationPrice: bigint;
   openFee: bigint;
   openedAt: number;
+  /** On-chain sources: automatic close prices (null = none). */
+  takeProfit?: bigint | null;
+  stopLoss?: bigint | null;
+};
+
+/** A resting limit or stop order (on-chain sources). */
+export type RestingOrder = {
+  id: string;
+  marketId: string;
+  side: Side;
+  /** limit: fills at the trigger or better. stop: fills once the price passes the trigger. */
+  type: "limit" | "stop";
+  triggerPrice: bigint;
+  collateral: bigint;
+  leverage: number;
+  notional: bigint;
+  takeProfit: bigint | null;
+  stopLoss: bigint | null;
+  createdAt: number;
 };
 
 export type ClosedTrade = {
@@ -53,13 +72,15 @@ export type ClosedTrade = {
   /** Net of open and close fees. */
   realisedPnl: bigint;
   closedAt: number;
-  reason: "closed" | "liquidated";
+  reason: "closed" | "liquidated" | "partial" | "take-profit" | "stop-loss";
 };
 
 export type Account = {
   balance: bigint;
   positions: Position[];
   history: ClosedTrade[];
+  /** On-chain sources: resting limit/stop orders. */
+  orders?: RestingOrder[];
 };
 
 export type OpenPositionRequest = {
@@ -67,7 +88,12 @@ export type OpenPositionRequest = {
   side: Side;
   collateral: bigint;
   leverage: number;
+  /** On-chain sources: close automatically here (price, DECIMALS.price). */
+  takeProfit?: bigint | null;
+  stopLoss?: bigint | null;
 };
+
+export type OrderRequest = OpenPositionRequest & { type: "limit" | "stop"; triggerPrice: bigint };
 
 export type VaultStats = {
   tvl: bigint;
@@ -186,4 +212,17 @@ export interface DataSource extends TradingAccount {
 
   /** Simulated only: restore the starting paper balance and clear everything. */
   resetPaper?(): Promise<void>;
+
+  // ---- Advanced trading (on-chain sources). The UI shows each control only when its method exists.
+  /** Place a resting limit or stop order; collateral and fee are escrowed until it fills or is cancelled. */
+  placeOrder?(req: OrderRequest): Promise<void>;
+  cancelOrder?(orderId: string): Promise<void>;
+  /** Close part of a position: `fractionBps` of its size (10,000 = all). */
+  decreasePosition?(positionId: string, fractionBps: number): Promise<void>;
+  addMargin?(positionId: string, amount: bigint): Promise<void>;
+  removeMargin?(positionId: string, amount: bigint): Promise<void>;
+  /** Set or clear take-profit / stop-loss (null = none). */
+  setTriggers?(positionId: string, takeProfit: bigint | null, stopLoss: bigint | null): Promise<void>;
+  /** Longer-horizon change per market (bps): 30 days and 1 year. */
+  getChanges?(): Promise<Record<string, { d30Bps: number; y1Bps: number }>>;
 }

@@ -1,4 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createPublicClient, http, stringToHex } from "viem";
+import { robinhoodTestnet } from "viem/chains";
+import { EXCHANGE } from "../config/exchange";
+import { priceOracleAbi, stoxhomesPerpsAbi, stoxhomesVaultAbi } from "../lib/exchange/abis";
 
 const PORT = 8570;
 const UPSTREAM = process.env.RPC_URL_TESTNET ?? "https://rpc.testnet.chain.robinhood.com";
@@ -18,13 +22,25 @@ export default async function globalSetup() {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  // Warm the fork: the first reads pull contract state from the real testnet.
-  const call = (to: string, data: string) =>
-    fetch(`http://127.0.0.1:${PORT}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }) }).catch(() => null);
-  const ORACLE = "0x7ddbbe04dD07e8765F21eE30a5281D7100aE3159";
-  const NYC = "6e79630000000000000000000000000000000000000000000000000000000000";
-  await call(ORACLE, `0x8d4c1a8e${NYC}`); // lastPrice(bytes32) selector is irrelevant for warming; any call pulls the code
-  await fetch("http://localhost:3400/api/exchange/history?market=nyc&range=1D").catch(() => null);
+  // Warm the fork: the first reads pull contract state from the real testnet, slowly. Make the page's own poll once.
+  const dep = EXCHANGE.testnet!;
+  const client = createPublicClient({ chain: robinhoodTestnet, transport: http(`http://127.0.0.1:${PORT}`, { timeout: 120_000 }) });
+  const key = (id: string) => stringToHex(id, { size: 32 });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await client.multicall({
+        allowFailure: true,
+        contracts: [
+          ...dep.markets.map((m) => ({ address: dep.oracle, abi: priceOracleAbi, functionName: "lastPrice", args: [key(m)] }) as const),
+          ...dep.markets.map((m) => ({ address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "market", args: [key(m)] }) as const),
+          { address: dep.vault, abi: stoxhomesVaultAbi, functionName: "totalAssets" } as const,
+        ],
+      });
+      break;
+    } catch {
+      // the upstream RPC hiccuped; try again
+    }
+  }
   return () => {
     anvil.kill();
   };

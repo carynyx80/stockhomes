@@ -62,15 +62,20 @@ from that source, not assumed.
 `contracts/` (PriceOracle, StoxhomesVault, StoxhomesPerps). **Mainnet: not deployed.** They must be audited first, with the
 owner role held by a multisig.
 
-**Testnet (Robinhood Chain testnet, 46630), deployed 2026-10-20 at block 139,678,022** by `0x64D3521F1F848F2EEFe1CB12ACcD4Aa52B8e291e`
-(testnet-only deployer, also owner, publisher and treasury on testnet):
+**Testnet v2 (Robinhood Chain testnet, 46630), deployed 2026-10-21 at block 139,711,406** by `0x64D3521F1F848F2EEFe1CB12ACcD4Aa52B8e291e`
+(testnet-only deployer, also owner, publisher and treasury on testnet). 100 city markets, limit/stop orders,
+take-profit/stop-loss, partial closes and margin withdrawal. Vault seeded with 20,000,000 tUSDG.
 
 | Contract | Address |
 |---|---|
-| TestUSDG (tUSDG, public faucet) | `0xE33f794eD0ebC1009bb7277835C2830F8C9d74A1` |
-| PriceOracle | `0x7ddbbe04dD07e8765F21eE30a5281D7100aE3159` |
-| StoxhomesVault | `0x73e615e2558DA1Bbd5da735Dcc07967541A965F2` |
-| StoxhomesPerps | `0x69A9d5D11834c3c1417e1f1C9534Bd0dA64e0648` |
+| TestUSDG (tUSDG, public faucet; reused from v1) | `0xE33f794eD0ebC1009bb7277835C2830F8C9d74A1` |
+| PriceOracle | `0x2b67155A19419E35c78072D6e8AECfCB8549ef26` |
+| StoxhomesVault | `0x369A37EC6054c19Ab4908fE3C00Acabd6B6104f3` |
+| StoxhomesPerps | `0xbaB5921C739b02e9520B2B97038c3698257dAd0f` |
 
-Smoke test on testnet: opened a 5x New York long (`0x953163c9…98773`) and closed it 65s later (`0x27343d7d…cbba1`);
-the round trip cost exactly the fees.
+Checked on-chain after deploying: `marketCount()` = 100, Vault `totalAssets()` = 20,000,000 tUSDG, `vault.perps()` = the
+perps contract, `minHoldSeconds()` = 60, deployer is an oracle publisher. Opening prices for all 100 markets were posted
+by the keeper in `0xbb275310…c19ff` and `0x2092ba4c…502e7`, each within 1% of the latest source reading.
+
+The v1 contracts (oracle `0x7ddbbe04…3159`, Vault `0x73e615e2…65F2`, perps `0x69A9d5D1…0648`; four markets) are retired:
+the site and keeper no longer use them.

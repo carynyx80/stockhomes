@@ -64,3 +64,16 @@ export function formatCountdown(ms: number): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return d > 0 ? `${d}d ${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
+
+/** Parses a price typed by a user ("725,000" or "725000.5") into DECIMALS.price fixed point. */
+export function parsePrice(input: string): bigint | null {
+  const s = input.replace(/[,$\s]/g, "");
+  if (!/^\d+(\.\d*)?$|^\.\d+$/.test(s)) return null;
+  const [int, frac = ""] = s.split(".");
+  if (frac.length > DECIMALS.price) return null;
+  const v = BigInt(int || "0") * 10n ** BigInt(DECIMALS.price) + BigInt(frac.padEnd(DECIMALS.price, "0") || "0");
+  return v > 0n ? v : null;
+}
+
+/** A price as a plain editable string ("725000.00"). */
+export const priceInput = (v: bigint) => formatFixed(v, DECIMALS.price, 2).replace(/,/g, "");

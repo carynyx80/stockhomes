@@ -54,3 +54,4 @@ next-env.d.ts
 /contracts/cache/
 /contracts/broadcast/
 /.next-live/
+/.next-keeper/
