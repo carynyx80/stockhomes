@@ -13,6 +13,13 @@ export const TOKEN = {
   ticker: "$STOXH",
   totalSupply: 1_000_000_000n,
   decimals: 18,
+  /**
+   * The launched token on Robinhood Chain mainnet (4663), for display only. Verified on-chain 2026-10-21:
+   * name "Stoxhome", symbol STOXH, 18 decimals, 1,000,000,000 supply, launched through the Pons V2 factory.
+   * The fee bot and burn ledger still read TOKEN_ADDRESS from the environment, which stays unset.
+   */
+  address: "0x5DF76B1eEb1F83dF875d4798284feE41E49801C4",
+  explorer: "https://robinhoodchain.blockscout.com/token/0x5DF76B1eEb1F83dF875d4798284feE41E49801C4",
 } as const;
 
 /** Official social accounts, linked in the footer. */

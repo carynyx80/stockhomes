@@ -12,7 +12,7 @@ const room = ROOMS.find((r) => r.href === "/docs")!;
 const EXPLORER = "https://robinhoodchain.blockscout.com";
 const M = CONTRACTS.mainnet!;
 const CONTRACT_ROWS: [string, string | null][] = [
-  [`${TOKEN.ticker} token`, tokenAddress()],
+  [`${TOKEN.ticker} token`, tokenAddress() ?? TOKEN.address],
   ["Burn address", BOT.deadAddress],
   ["Pons V2 launch factory", M.ponsFactory],
   ["Pons V2 fee hook", M.ponsMemeHook],

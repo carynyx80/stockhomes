@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { SOCIALS, TOKEN, TRADING } from "@/config/stoxhomes";
+import { SOCIALS, TRADING } from "@/config/stoxhomes";
+import { ContractAddress } from "@/components/token/ContractAddress";
 import { LeaveTheHouse } from "./LeaveTheHouse";
 
 export function Footer() {
@@ -20,9 +21,7 @@ export function Footer() {
         </div>
         <div className="flex flex-col items-start gap-3 md:items-end">
           <div className="flex items-center gap-3">
-            <span className="numeric rounded-sm border border-brass/70 bg-brass/10 px-2.5 py-1 text-xs text-wine">
-              {TOKEN.ticker} <span className="text-ink/60">coming soon</span>
-            </span>
+            <ContractAddress />
             <a
               href={SOCIALS.x.url}
               target="_blank"

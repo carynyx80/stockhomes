@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ContractAddress } from "@/components/token/ContractAddress";
 import type { BurnsResponse } from "@/app/api/burns/route";
 import { TOKEN } from "@/config/stoxhomes";
 import { formatCountdown, formatFixed } from "@/lib/format";
@@ -71,7 +72,7 @@ export function FireplaceRoom() {
     <div className="pt-10">
       <section aria-labelledby="burned-heading" className="mx-auto max-w-2xl text-center">
         <p id="burned-heading" className="text-xs font-semibold uppercase tracking-[0.22em] text-brass">
-          {lit ? `${TOKEN.ticker} burned by the buyback` : "The fire isn’t lit yet"}
+          {lit ? `${TOKEN.ticker} burned by the buyback` : "No burns yet"}
         </p>
         <p className="numeric mt-3 text-[clamp(2.4rem,8vw,4.5rem)] leading-none text-oxblood" aria-live="polite">
           {data ? tokens(burned) : "—"}
@@ -83,9 +84,13 @@ export function FireplaceRoom() {
               <span className="numeric">1,000,000,000</span> supply, sent to the dead address forever.
             </>
           ) : (
-            <>Every buyback will burn here, live, once {TOKEN.ticker} launches.</>
+            <>{TOKEN.ticker} is live. Every buyback will burn here, live.</>
           )}
         </p>
+
+        <div className="mt-4">
+          <ContractAddress full />
+        </div>
 
         <div className="mx-auto mt-6 max-w-xl">
           <Hearth lit={lit} flare={flare} />

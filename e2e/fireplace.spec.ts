@@ -41,12 +41,13 @@ test("fireplace shows the ledger and flares when a new burn arrives", async ({ p
   await expect(page.locator(".hearth-flames")).toHaveClass(/is-flaring/);
 });
 
-test("fireplace before launch shows a cold hearth", async ({ page }) => {
+test("fireplace before the first burn shows a cold hearth and the contract address", async ({ page }) => {
   await page.route("**/api/burns", (route) =>
     route.fulfill({ json: { ...base, status: "not-launched", token: null, onChainDeadBalance: null, totalBurned: "0", burns: [] } }),
   );
   await page.goto("/burn");
-  await expect(page.getByText("The fire isn’t lit yet")).toBeVisible();
+  await expect(page.getByText("No burns yet")).toBeVisible();
+  await expect(page.getByText("0x5DF76B1eEb1F83dF875d4798284feE41E49801C4").first()).toBeVisible();
   await expect(page.locator(".hearth-flames")).toHaveClass(/is-out/);
 });
 

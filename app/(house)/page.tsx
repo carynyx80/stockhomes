@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { ContractAddress } from "@/components/token/ContractAddress";
 import { BRAND, SETTLEMENT, TRADING } from "@/config/stoxhomes";
 import { ROOMS } from "@/lib/rooms";
 
@@ -26,6 +27,9 @@ export default function Foyer() {
           <Link href="/trade" className="btn-oxblood mt-6 inline-block">
             Step onto the Trading Floor
           </Link>
+          <div className="mt-5">
+            <ContractAddress full />
+          </div>
         </div>
       </section>
 
