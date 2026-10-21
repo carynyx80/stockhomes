@@ -15,6 +15,11 @@ export const TOKEN = {
   decimals: 18,
 } as const;
 
+/** Official social accounts, linked in the footer. */
+export const SOCIALS = {
+  x: { handle: "@Stoxhomes", url: "https://x.com/Stoxhomes" },
+} as const;
+
 /** Settlement asset for the exchange. */
 export const SETTLEMENT = {
   symbol: "USDG",
