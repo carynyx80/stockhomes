@@ -43,7 +43,9 @@ import type {
  * Not on-chain (yet): City Wars stays a paper game (delegated to the simulated source).
  */
 
-const POLL_MS = 6_000;
+const POLL_MS = 5_000;
+/** How often an open page asks the server to post due prices (testnet live movement). */
+const TICK_MS = 20_000;
 const SHARE_UNIT = 10n ** 12n; // vault shares: 6 asset decimals + 6 offset decimals
 const SHARE_SCALE = 10n ** 6n; // shown to the UI in 6-decimal units, like the simulated vault
 const LOG_CHUNK = 50_000n;
@@ -106,6 +108,20 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
   let historyFor: string | null = null;
   let lastHistoryFetch = 0;
   let inFlight: Promise<void> | null = null;
+  let focus: string | null = null;
+  let ticker: ReturnType<typeof setInterval> | null = null;
+
+  /** Ask the server to post due prices; it decides what's due, so this is safe to call from every open page. */
+  async function tick() {
+    if (network !== "testnet" || (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
+    try {
+      const r = await fetch("/api/exchange/tick", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ focus: focus ? [focus] : [] }) });
+      const body = (await r.json()) as { posted?: number };
+      if (body.posted) void poll();
+    } catch {
+      // offline: the next tick retries
+    }
+  }
 
   function emptySnapshot(): Snapshot {
     const ps = paper.getSnapshot();
@@ -143,7 +159,7 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
 
   let longChanges: Record<string, { d30Bps: number; y1Bps: number }> = {};
   async function refreshChange24h() {
-    if (Date.now() - lastChangeFetch < 10 * 60_000 && Object.keys(change24h).length) return;
+    if (Date.now() - lastChangeFetch < 60_000 && Object.keys(change24h).length) return;
     lastChangeFetch = Date.now();
     try {
       const r = await fetch("/api/exchange/changes");
@@ -438,12 +454,16 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
       if (!timer) {
         void poll();
         timer = setInterval(() => void poll(), POLL_MS);
+        void tick();
+        ticker = setInterval(() => void tick(), TICK_MS);
       }
       return () => {
         listeners.delete(listener);
         if (listeners.size === 0 && timer) {
           clearInterval(timer);
           timer = null;
+          if (ticker) clearInterval(ticker);
+          ticker = null;
         }
       };
     },
@@ -608,6 +628,12 @@ export function createLiveSource(dep: ExchangeDeployment, network: "testnet" | "
       return send(async (w) =>
         confirm(await write(w, { address: dep.perps, abi: stoxhomesPerpsAbi, functionName: "setTriggers", args: [BigInt(positionId), takeProfit ?? 0n, stopLoss ?? 0n] })),
       );
+    },
+
+    focusMarket(id) {
+      if (focus === id) return;
+      focus = id;
+      void tick();
     },
 
     async getChanges() {

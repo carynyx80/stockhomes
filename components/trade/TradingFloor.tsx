@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LineChart, type ChartGuide } from "@/components/charts/LineChart";
 import { data, type HistoryRange } from "@/lib/data";
 import { useHistory, useSnapshot } from "@/lib/data/hooks";
@@ -28,6 +28,7 @@ export function TradingFloor() {
   const [draft, setDraft] = useState<TicketDraft | null>(null);
   const onDraft = useCallback((d: TicketDraft | null) => setDraft(d), []);
   const market = marketById(marketId);
+  useEffect(() => data.focusMarket?.(marketId), [marketId]);
   const quote = snap?.quotes[marketId] ?? null;
 
   const history = useHistory(`price:${marketId}`, (r) => data.getHistory(marketId, r), range);
@@ -85,7 +86,9 @@ export function TradingFloor() {
                   )}
                 </p>
                 <p className="mt-1 text-xs text-ink/55">
-                  {data.mode === "live" ? `On-chain oracle price · ${source ? SOURCE_LABEL[source.kind] : "index"}` : "Simulated home-price index, USD"}
+                  {data.mode === "live"
+                    ? `On-chain oracle price · ${source ? SOURCE_LABEL[source.kind] : "index"}${data.network === "testnet" ? " + simulated live volatility" : ""}`
+                    : "Simulated home-price index, USD"}
                 </p>
               </div>
               <RangeTabs ranges={RANGES} value={range} onChange={setRange} label="Chart range" />

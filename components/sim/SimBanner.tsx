@@ -8,7 +8,7 @@ export function SimBanner() {
         <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-brass" />
         <strong className="font-semibold">Testnet — test tokens only, no real funds.</strong>
         <span className="text-wine/80">
-          Trades settle on Robinhood Chain testnet in tUSDG. Prices follow the official home-price indices.
+          Trades settle on Robinhood Chain testnet in tUSDG. Prices track official home-price indices, with simulated live volatility so markets move.
         </span>
       </div>
     );

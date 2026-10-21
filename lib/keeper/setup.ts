@@ -7,6 +7,7 @@ import { ORACLE_MARKETS } from "@/config/oracle";
 import { network, rpcUrl } from "@/lib/env";
 import { fetchAllObservations } from "@/lib/oracle/sources";
 import type { Observation } from "@/lib/oracle/price";
+import { noiseSeed } from "@/lib/oracle/noise";
 import type { KeeperDeps } from "./keeper";
 
 /**
@@ -28,6 +29,15 @@ export async function observations(): Promise<Record<string, Observation[]>> {
       pending = null;
     });
   return pending;
+}
+
+/** A read-only client for the configured network, shared by the API routes. */
+let shared: PublicClient | null = null;
+export function readClient(): PublicClient {
+  if (shared) return shared;
+  const chain = network() === "mainnet" ? robinhood : robinhoodTestnet;
+  shared = createPublicClient({ chain, transport: http(rpcUrl() ?? chain.rpcUrls.default.http[0], { retryCount: 2, retryDelay: 500 }), batch: { multicall: true } }) as PublicClient;
+  return shared;
 }
 
 export type KeeperSetup = { ok: true; deps: KeeperDeps; dryRun: boolean } | { ok: false; message: string };
@@ -53,5 +63,5 @@ export async function setupKeeper(): Promise<KeeperSetup> {
   const account = privateKeyToAccount(key);
   const wallet = dryRun ? null : createWalletClient({ account, chain, transport });
 
-  return { ok: true, dryRun, deps: { client, wallet, account: account.address, deployment, markets: ORACLE_MARKETS, observations: await observations() } };
+  return { ok: true, dryRun, deps: { client, wallet, account: account.address, deployment, markets: ORACLE_MARKETS, observations: await observations(), noiseSeed: network() === "testnet" ? noiseSeed() : undefined } };
 }

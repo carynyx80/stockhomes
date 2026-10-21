@@ -223,6 +223,8 @@ export interface DataSource extends TradingAccount {
   removeMargin?(positionId: string, amount: bigint): Promise<void>;
   /** Set or clear take-profit / stop-loss (null = none). */
   setTriggers?(positionId: string, takeProfit: bigint | null, stopLoss: bigint | null): Promise<void>;
+  /** On-chain sources: the market on screen, so live price updates prioritise it. */
+  focusMarket?(marketId: string): void;
   /** Longer-horizon change per market (bps): 30 days and 1 year. */
   getChanges?(): Promise<Record<string, { d30Bps: number; y1Bps: number }>>;
 }

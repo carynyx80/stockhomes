@@ -2,7 +2,8 @@ import { stringToHex, type Address, type Hex, type PublicClient, type WalletClie
 import { KEEPER, type OracleMarket } from "@/config/oracle";
 import type { ExchangeDeployment } from "@/config/exchange";
 import { priceOracleAbi, stoxhomesPerpsAbi } from "@/lib/exchange/abis";
-import { marketPriceAt, nextPost, toOracleUnits, type Observation } from "@/lib/oracle/price";
+import { livePriceAt } from "@/lib/oracle/live-price";
+import { nextPost, toOracleUnits, type Observation } from "@/lib/oracle/price";
 
 /**
  * The exchange keeper. Each run:
@@ -42,12 +43,22 @@ export type KeeperDeps = {
   markets: OracleMarket[];
   /** Monthly readings per market id (fetched by the caller, so they can be cached). */
   observations: Record<string, Observation[]>;
+  /** Testnet: the secret for live movement around the index (lib/oracle/noise.ts). Absent = index path only. */
+  noiseSeed?: string;
 };
+
+/**
+ * cron: the daily run (post markets that moved or need a heartbeat).
+ * tick: the visitor-driven run: markets someone is watching or trading post every `hotSeconds`, the rest every
+ * `fullSeconds`; nothing is sent if no market is due.
+ */
+export type KeeperOptions = { mode?: "cron" | "tick"; focus?: string[]; hotSeconds?: number; fullSeconds?: number; maxActions?: number };
 
 type PositionView = { owner: Address; market: Hex; isLong: boolean; collateral: bigint; size: bigint; entryPrice: bigint; takeProfit: bigint; stopLoss: bigint };
 type OrderView = { owner: Address; market: Hex; isLong: boolean; triggerAbove: boolean; triggerPrice: bigint };
 
-export async function runKeeper(d: KeeperDeps): Promise<KeeperReport> {
+export async function runKeeper(d: KeeperDeps, opts: KeeperOptions = {}): Promise<KeeperReport> {
+  const tick = opts.mode === "tick";
   const log: string[] = [];
   const block = await d.client.getBlock();
   // Chain time, not the server clock: heartbeats and glide targets must agree with what the contracts see.
@@ -82,6 +93,19 @@ export async function runKeeper(d: KeeperDeps): Promise<KeeperReport> {
   );
   const price: Record<string, bigint> = {};
   const toPost: { key: Hex; price: bigint }[] = [];
+  let hot = new Set<string>();
+  if (tick) {
+    const oi = await readMany<{ longSize: bigint; shortSize: bigint }>(ids.map((id) => ({ ...perps, functionName: "market", args: [marketKey(id)] })));
+    const orderCount = Number(await d.client.readContract({ ...perps, functionName: "openOrderCount" }));
+    const orderIds = orderCount ? ((await d.client.readContract({ ...perps, functionName: "openOrderIds", args: [0n, BigInt(KEEPER.pageSize)] })) as readonly bigint[]) : [];
+    const orderMarkets = orderIds.length ? await readMany<{ market: Hex }>(orderIds.map((id) => ({ ...perps, functionName: "order", args: [id] }))) : [];
+    const keyed = new Map(ids.map((id) => [marketKey(id).toLowerCase(), id]));
+    hot = new Set([
+      ...(opts.focus ?? []).filter((f) => ids.includes(f)),
+      ...ids.filter((_, i) => oi[i].longSize > 0n || oi[i].shortSize > 0n),
+      ...orderMarkets.map((o) => keyed.get(o.market.toLowerCase())).filter((x): x is string => !!x),
+    ]);
+  }
   ids.forEach((id, i) => {
     const [onChain, updatedAt] = feeds[i];
     price[id] = onChain;
@@ -91,14 +115,24 @@ export async function runKeeper(d: KeeperDeps): Promise<KeeperReport> {
       report.prices.push({ market: id, onChain: onChain.toString(), target: "?", posted: null, reason: "no price source" });
       return;
     }
-    const target = toOracleUnits(marketPriceAt(m, obs, chainTime * 1000));
+    const target = toOracleUnits(livePriceAt(m, obs, chainTime * 1000, d.noiseSeed));
     const next = nextPost(onChain, target, KEEPER.maxStepBps);
     const changeBps = onChain === 0n ? 10_000n : ((next > onChain ? next - onChain : onChain - next) * 10_000n) / onChain;
-    const stale = chainTime - Number(updatedAt) >= KEEPER.heartbeatSeconds;
-    const move = changeBps >= BigInt(KEEPER.minChangeBps);
-    const reason = move ? `moves ${Number(changeBps) / 100}%` : stale ? "heartbeat" : "unchanged";
-    report.prices.push({ market: id, onChain: onChain.toString(), target: target.toString(), posted: move || stale ? next.toString() : null, reason });
-    if (move || stale) {
+    const age = chainTime - Number(updatedAt);
+    const stale = age >= KEEPER.heartbeatSeconds;
+    let post: boolean;
+    let reason: string;
+    if (tick) {
+      const due = age >= (hot.has(id) ? (opts.hotSeconds ?? 20) : (opts.fullSeconds ?? 600));
+      post = next !== onChain && due;
+      reason = post ? (hot.has(id) ? "live tick" : "sweep") : due ? "unchanged" : "not due";
+    } else {
+      const move = changeBps >= BigInt(KEEPER.minChangeBps);
+      post = move || stale;
+      reason = move ? `moves ${Number(changeBps) / 100}%` : stale ? "heartbeat" : "unchanged";
+    }
+    report.prices.push({ market: id, onChain: onChain.toString(), target: target.toString(), posted: post ? next.toString() : null, reason });
+    if (post) {
       toPost.push({ key: marketKey(id), price: next });
       price[id] = next;
     }
@@ -114,7 +148,9 @@ export async function runKeeper(d: KeeperDeps): Promise<KeeperReport> {
 
   const priceByKey = new Map(ids.map((id) => [marketKey(id).toLowerCase(), price[id]]));
   const priceOfKey = (k: Hex) => priceByKey.get(k.toLowerCase()) ?? 0n;
-  let budget: number = KEEPER.maxActionsPerRun;
+  let budget: number = opts.maxActions ?? KEEPER.maxActionsPerRun;
+  // A tick with nothing to post moved no prices, so nothing new can have become fillable or liquidatable.
+  if (tick && !toPost.length) return report;
 
   async function act(kind: Action["kind"], id: bigint, functionName: string) {
     if (budget <= 0) return;
