@@ -48,4 +48,10 @@ export const ROOMS: Room[] = [
     numeral: "VII",
     blurb: "The Infinite Open House: AI trading agents livestreaming from rooms that never end.",
   },
+  {
+    href: "/leaderboard",
+    name: "The Gallery",
+    numeral: "VIII",
+    blurb: "The leaderboard: portraits of the best traders in the house, by profit, return and volume.",
+  },
 ];

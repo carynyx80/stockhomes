@@ -81,7 +81,27 @@ export function AgentRoom({ slug }: { slug: string }) {
     return () => es.close();
   }, [slug, load]);
 
+  // Without shared storage, backing is remembered in this browser (and counted on top of the shared tally).
+  const [localBack, setLocalBack] = useState(false);
+  useEffect(() => {
+    try {
+      setLocalBack(localStorage.getItem(`stoxhomes:back:${slug}`) === "1");
+    } catch {
+      // storage blocked
+    }
+  }, [slug]);
+
   const follow = async () => {
+    if (detail && !detail.interactive) {
+      const next = !localBack;
+      setLocalBack(next);
+      try {
+        localStorage.setItem(`stoxhomes:back:${slug}`, next ? "1" : "0");
+      } catch {
+        // storage blocked: it just won't persist
+      }
+      return;
+    }
     if (!followerKey.current) return;
     const res = await fetch(`/api/house/${slug}/follow`, {
       method: "POST",
@@ -108,6 +128,9 @@ export function AgentRoom({ slug }: { slug: string }) {
 
   const boarded = detail.status === "boarded_up";
   const series = detail.equitySeries.map((p) => ({ t: p.t, v: toNumber(BigInt(p.equity), DECIMALS.usdg) }));
+  const seriesDays = series.length > 1 ? Math.max(1, Math.round((series[series.length - 1].t - series[0].t) / 86_400_000)) : 0;
+  const following = detail.interactive ? detail.following : localBack;
+  const followers = detail.followers + (!detail.interactive && localBack ? 1 : 0);
 
   return (
     <div className="pb-6">
@@ -140,7 +163,7 @@ export function AgentRoom({ slug }: { slug: string }) {
           <dt className="text-[10px] uppercase tracking-[0.16em] text-ink/55">Followers</dt>
           <dd className="numeric text-lg">{formatUsdg(BigInt(detail.equity), 0)}</dd>
           <dd className={`numeric text-lg ${detail.pnlTodayBps >= 0 ? "text-long" : "text-short"}`}>{formatBps(detail.pnlTodayBps)}</dd>
-          <dd className="numeric text-lg">{detail.followers}</dd>
+          <dd className="numeric text-lg">{followers}</dd>
         </dl>
       </div>
 
@@ -151,15 +174,14 @@ export function AgentRoom({ slug }: { slug: string }) {
           <button
             type="button"
             onClick={follow}
-            disabled={!detail.interactive}
-            aria-pressed={detail.following}
-            className={`rounded py-2.5 text-sm font-semibold transition-colors ${detail.following ? "border border-oxblood text-oxblood hover:bg-parchment" : "bg-oxblood text-beige hover:bg-wine"}`}
+            aria-pressed={following}
+            className={`rounded py-2.5 text-sm font-semibold transition-colors ${following ? "border border-oxblood text-oxblood hover:bg-parchment" : "bg-oxblood text-beige hover:bg-wine"}`}
           >
-            {detail.following ? "Following ✓" : "Back this agent"}{" "}
-            <span className="numeric font-normal opacity-80">· {detail.followers}</span>
+            {following ? "Backing ✓" : "Back this agent"}{" "}
+            <span className="numeric font-normal opacity-80">· {followers}</span>
           </button>
           <p className="text-[11px] leading-snug text-ink/55">
-            {detail.interactive ? "Backing is a free follow. It doesn’t buy anything." : "Follows open once the house database is connected."}
+            {detail.interactive ? "Backing is a free follow. It doesn’t buy anything." : "Backing is a free follow, saved in this browser. It doesn’t buy anything."}
           </p>
           <div className="panel p-4 text-sm leading-relaxed text-ink/80">
             <p className="editorial text-lg text-wine">Persona</p>
@@ -189,7 +211,7 @@ export function AgentRoom({ slug }: { slug: string }) {
           <ol aria-live="polite" aria-label="Commentary, newest first" className="mt-3 flex max-h-[34rem] flex-col gap-3 overflow-y-auto pr-1" data-testid="broadcast">
             {lines.length === 0 && <li className="text-sm text-ink/60">Quiet in here. The first line lands on the next tick.</li>}
             {lines.map((l) => (
-              <li key={l.id} className="border-b border-sand/60 pb-3 last:border-0">
+              <li key={l.id} data-line-id={l.id} className="border-b border-sand/60 pb-3 last:border-0">
                 <p className="flex items-baseline gap-2">
                   <span className="editorial text-base text-oxblood">{detail.name}</span>
                   {KIND_LABEL[l.kind] && <span className="text-[10px] uppercase tracking-[0.16em] text-brass">{KIND_LABEL[l.kind]}</span>}
@@ -237,7 +259,7 @@ export function AgentRoom({ slug }: { slug: string }) {
 
           <section aria-labelledby="pnl-heading" className="panel p-4">
             <h2 id="pnl-heading" className="editorial text-xl text-oxblood">
-              Equity, 7 days
+              Equity{seriesDays ? `, ${seriesDays} ${seriesDays === 1 ? "day" : "days"}` : ""}
             </h2>
             <div className="mt-2">
               <LineChart

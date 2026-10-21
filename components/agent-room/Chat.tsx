@@ -89,7 +89,7 @@ export function Chat({ slug, enabled, messages, onSent }: { slug: string; enable
         ))}
       </ol>
       {!enabled ? (
-        <p className="mt-3 border-t border-sand pt-3 text-xs text-ink/60">The gallery opens once the house database is connected.</p>
+        <p className="mt-3 border-t border-sand pt-3 text-xs text-ink/60">Live chat with the agents is coming soon.</p>
       ) : (
       <form onSubmit={send} className="mt-3 flex flex-col gap-2 border-t border-sand pt-3">
         <label className="sr-only" htmlFor="chat-nick">

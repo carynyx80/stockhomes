@@ -76,43 +76,49 @@ test("reduced motion: the door doesn't swing, it just opens", async ({ page }) =
   await expect(page).toHaveURL(/\/house\/miami-bull$/);
 });
 
-test("commentary arrives over SSE, after the trade, and chat is live too", async ({ page, request }) => {
-  await page.goto("/house/london-doomer");
-  await expect(page.getByText("Live", { exact: true })).toBeVisible();
-  const broadcast = page.getByTestId("broadcast").locator("li");
-  const before = await broadcast.count();
+// Both tests post chat, which is rate-limited per visitor IP: run them one after the other, never side by side.
+test.describe.serial("chat", () => {
+  test("commentary arrives over SSE, after the trade, and chat is live too", async ({ page, request }) => {
+    await page.goto("/house/london-doomer");
+    await expect(page.getByText("Live", { exact: true })).toBeVisible();
+    const broadcast = page.getByTestId("broadcast").locator("li[data-line-id]");
+    // The newest line id: the list keeps a fixed number of lines, so a new one shows up as a higher id, not a longer list.
+    const newest = async () => Math.max(0, ...(await broadcast.evaluateAll((els) => els.map((e) => Number(e.getAttribute("data-line-id"))))));
+    await page.waitForTimeout(1_000); // let the backlog land
+    const before = await newest();
 
-  // Tick the agent until it says something (a rejected decision posts nothing, by design).
-  await expect
-    .poll(
-      async () => {
-        const r = await request.get("/api/cron/agents?agent=london-doomer", { headers: CRON });
-        expect(r.ok()).toBe(true);
-        return broadcast.count();
-      },
-      { timeout: 20_000, intervals: [500] },
-    )
-    .toBeGreaterThan(before);
+    // Tick the agent until it says something (a rejected decision posts nothing, by design).
+    await expect
+      .poll(
+        async () => {
+          const r = await request.get("/api/cron/agents?agent=london-doomer", { headers: CRON });
+          expect(r.ok()).toBe(true);
+          return newest();
+        },
+        { timeout: 20_000, intervals: [500] },
+      )
+      .toBeGreaterThan(before);
 
-  // Chat goes out over the same stream.
-  await page.getByLabel("Nickname").fill("e2e_visitor");
-  await page.getByLabel("Message", { exact: true }).fill("Rain again, Doomer?");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByRole("list", { name: "Chat" }).getByText("Rain again, Doomer?")).toBeVisible();
+    // Chat goes out over the same stream.
+    await page.getByLabel("Nickname").fill("e2e_visitor");
+    await page.getByLabel("Message", { exact: true }).fill("Rain again, Doomer?");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByRole("list", { name: "Chat" }).getByText("Rain again, Doomer?")).toBeVisible();
 
-  // Rate limit: a second message straight away is refused.
-  await page.getByLabel("Message", { exact: true }).fill("And again");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Slow down a little.")).toBeVisible();
-});
+    // Rate limit: a second message straight away is refused.
+    await page.getByLabel("Message", { exact: true }).fill("And again");
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByText("Slow down a little.")).toBeVisible();
+  });
 
-test("chat filter refuses abuse and links", async ({ request }) => {
-  const post = (text: string, nickname = "tester_1") =>
-    request.post("/api/house/madame-escrow/chat", { data: { nickname, text }, headers: { "x-forwarded-for": `10.0.0.${Math.floor(Math.random() * 200)}` } });
-  expect((await post("visit https://scam.example")).status()).toBe(422);
-  expect((await post("kys")).status()).toBe(422);
-  expect((await post("hello", "Stoxhomes Admin")).status()).toBe(422);
-  expect((await post("Lovely parlour, Madame")).status()).toBe(201);
+  test("chat filter refuses abuse and links", async ({ request }) => {
+    const post = (text: string, nickname = "tester_1") =>
+      request.post("/api/house/madame-escrow/chat", { data: { nickname, text }, headers: { "x-forwarded-for": `10.0.0.${Math.floor(Math.random() * 200)}` } });
+    expect((await post("visit https://scam.example")).status()).toBe(422);
+    expect((await post("kys")).status()).toBe(422);
+    expect((await post("hello", "Stoxhomes Admin")).status()).toBe(422);
+    expect((await post("Lovely parlour, Madame")).status()).toBe(201);
+  });
 });
 
 test("follow toggles", async ({ page }) => {
@@ -120,8 +126,8 @@ test("follow toggles", async ({ page }) => {
   const back = page.getByRole("button", { name: /Back this agent/ });
   await expect(back).toBeVisible();
   await back.click();
-  await expect(page.getByRole("button", { name: /Following ✓/ })).toBeVisible();
-  await page.getByRole("button", { name: /Following ✓/ }).click();
+  await expect(page.getByRole("button", { name: /Backing ✓/ })).toBeVisible();
+  await page.getByRole("button", { name: /Backing ✓/ }).click();
   await expect(page.getByRole("button", { name: /Back this agent/ })).toBeVisible();
 });
 

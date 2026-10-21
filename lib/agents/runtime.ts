@@ -31,9 +31,17 @@ export type OpenHouse = TickDeps & {
 };
 
 const BANKROLL = BigInt(AGENTS.startingBankrollUsdg) * 10n ** BigInt(DECIMALS.usdg);
-/** Replay starts one 6-hour block before the current one: 6–12 simulated hours of history on a cold start. */
-const BLOCK_MS = 6 * 3_600_000;
 const MINUTE = 60_000;
+const DAY = 86_400_000;
+/**
+ * Without a database the house is a deterministic replay that starts this many days before today (UTC midnight):
+ * 2–3 days of history, about a second of catch-up per simulated day on a cold start.
+ */
+const REPLAY_DAYS = 2;
+/** With a database: how often a request may advance due agents (the daily cron alone would freeze them on Hobby). */
+const LIVE_TICK_MS = 20_000;
+
+export const replayEpoch = (now: number) => Math.floor(now / DAY) * DAY - REPLAY_DAYS * DAY;
 
 declare global {
   var __stoxhomesOpenHouse: OpenHouse | undefined;
@@ -47,54 +55,77 @@ export function openHouse(): OpenHouse {
   const url = databaseUrl();
   const rc = redisConfig();
   const redis = rc ? new Redis({ url: rc.url, token: rc.token }) : null;
-  const store = url ? pgAgentStore(url) : memoryAgentStore();
-  const deps: TickDeps = {
-    store,
-    exchange: new SimAgentExchange(store),
+  const opts = { dailyBudgetUsd: settings.dailyBudgetUsd, tickMinutes: settings.tickMinutes, limit: AGENTS.maxTicksPerRun };
+  const shared = {
     // Without a database every instance runs its own copy, so model calls would multiply and diverge: mock only.
     brain: url && settings.brain === "anthropic" ? anthropicBrain() : mockBrain(),
     publisher: redis ? redisPublisher(redis) : memoryPublisher(),
     lock: redis ? redisKeyedLock(redis) : memoryKeyedLock(),
   };
-  const opts = { dailyBudgetUsd: settings.dailyBudgetUsd, tickMinutes: settings.tickMinutes, limit: AGENTS.maxTicksPerRun };
 
   /*
    * No database (local dev, or a deployment before Postgres is connected): a deterministic replay.
-   * Every instance seeds the same agents at the same epoch (the start of the previous 6-hour UTC block) and
-   * advances on the same one-minute grid with the deterministic mock brain and seeded prices, so any two
-   * instances show the same world. It catches up lazily on each request; there's no timer to keep alive.
+   * Every instance seeds the same agents at the same epoch (UTC midnight, REPLAY_DAYS ago) and advances on the
+   * same one-minute grid with the deterministic mock brain and seeded prices, so any two instances show the same
+   * world. It catches up lazily on each request; when the day rolls over, the instance re-anchors to the new epoch
+   * so it keeps agreeing with freshly started instances.
    */
-  const epoch = Math.floor(Date.now() / BLOCK_MS) * BLOCK_MS - BLOCK_MS;
-  let cursor = epoch - MINUTE;
-  let catching: Promise<void> | null = null;
-
-  const ready = url
-    ? store.ensureSeeded(SEED_AGENTS, new Date(), BANKROLL, settings.tickMinutes)
-    : store.ensureSeeded(SEED_AGENTS, new Date(epoch), BANKROLL, settings.tickMinutes);
-
-  const sync = async () => {
-    await ready;
-    if (url) return;
-    catching ??= (async () => {
-      const target = Math.floor(Date.now() / MINUTE) * MINUTE;
-      for (let t = cursor + MINUTE; t <= target; t += MINUTE) {
-        await runDue(deps, new Date(t), opts);
-        cursor = t;
-      }
-    })().finally(() => {
-      catching = null;
-    });
-    await catching;
+  type World = { epoch: number; cursor: number; store: ReturnType<typeof memoryAgentStore>; ready: Promise<void> };
+  const newWorld = (epoch: number): World => {
+    const store = memoryAgentStore();
+    return { epoch, cursor: epoch - MINUTE, store, ready: store.ensureSeeded(SEED_AGENTS, new Date(epoch), BANKROLL, settings.tickMinutes) };
   };
 
-  globalThis.__stoxhomesOpenHouse = {
-    ...deps,
+  const pg = url ? pgAgentStore(url) : null;
+  let world: World | null = pg ? null : newWorld(replayEpoch(Date.now()));
+  let catching: Promise<void> | null = null;
+  let lastLiveTick = 0;
+
+  const store = pg ?? world!.store;
+  const house: OpenHouse = {
+    ...shared,
+    store,
+    exchange: new SimAgentExchange(store),
     rate: redis ? redisRateLimiter(redis) : memoryRateLimiter(),
-    ready,
-    sync,
-    storage: url ? "postgres" : "memory",
-    interactive: Boolean(url) || !process.env.VERCEL,
+    ready: pg ? pg.ensureSeeded(SEED_AGENTS, new Date(), BANKROLL, settings.tickMinutes) : world!.ready,
+    sync: async () => {
+      await house.ready;
+      if (pg) {
+        // Postgres: agents are shared state. Advance whoever is due, at most every LIVE_TICK_MS per instance;
+        // per-agent locks (Redis) keep two instances from ticking the same agent.
+        if (Date.now() - lastLiveTick < LIVE_TICK_MS) return;
+        lastLiveTick = Date.now();
+        catching ??= runDue(house, new Date(), opts)
+          .then(() => undefined)
+          .catch(() => undefined)
+          .finally(() => {
+            catching = null;
+          });
+        return;
+      }
+      catching ??= (async () => {
+        const epoch = replayEpoch(Date.now());
+        if (epoch !== world!.epoch) {
+          world = newWorld(epoch);
+          house.store = world.store;
+          house.exchange = new SimAgentExchange(world.store);
+          house.ready = world.ready;
+          await world.ready;
+        }
+        const target = Math.floor(Date.now() / MINUTE) * MINUTE;
+        for (let t = world!.cursor + MINUTE; t <= target; t += MINUTE) {
+          await runDue(house, new Date(t), opts);
+          world!.cursor = t;
+        }
+      })().finally(() => {
+        catching = null;
+      });
+      await catching;
+    },
+    storage: pg ? "postgres" : "memory",
+    interactive: Boolean(pg) || !process.env.VERCEL,
     settings,
   };
-  return globalThis.__stoxhomesOpenHouse;
+  globalThis.__stoxhomesOpenHouse = house;
+  return house;
 }

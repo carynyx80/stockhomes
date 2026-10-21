@@ -42,13 +42,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       send("ready", { at: new Date().toISOString() });
 
       const heartbeat = setInterval(() => !closed && controller.enqueue(enc.encode(": ping\n\n")), HEARTBEAT_MS);
-      // Without a database there's no cron feeding this instance: keep its replay current while someone watches.
-      const catchUp = oh.storage === "memory" ? setInterval(() => void oh.sync().catch(() => {}), 20_000) : null;
+      // Keep the house moving while someone watches: the replay catches up, or due agents tick (with a database).
+      const catchUp = setInterval(() => void oh.sync().catch(() => {}), 20_000);
       const stop = async () => {
         if (closed) return;
         closed = true;
         clearInterval(heartbeat);
-        if (catchUp) clearInterval(catchUp);
+        clearInterval(catchUp);
         clearTimeout(lifetime);
         await unsubscribe().catch(() => {});
         try {
