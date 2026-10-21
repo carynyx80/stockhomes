@@ -7,6 +7,7 @@ import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {PriceOracle} from "./PriceOracle.sol";
 import {IPerpsAccounting, StoxhomesVault} from "./StoxhomesVault.sol";
 
@@ -21,6 +22,7 @@ contract StoxhomesPerps is IPerpsAccounting, Ownable2Step, Pausable, ReentrancyG
     using SafeERC20 for IERC20;
     using SafeCast for uint256;
     using SafeCast for int256;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     uint256 private constant BPS = 10_000;
     uint256 private constant UNIT = 1e18;
@@ -81,6 +83,8 @@ contract StoxhomesPerps is IPerpsAccounting, Ownable2Step, Pausable, ReentrancyG
     bytes32[] public marketIds;
     mapping(uint256 => Position) internal _positions;
     uint256 public nextPositionId = 1;
+    EnumerableSet.UintSet internal _open;
+    mapping(address => EnumerableSet.UintSet) internal _byOwner;
 
     event MarketListed(bytes32 indexed market, MarketParams params);
     event MarketUpdated(bytes32 indexed market, MarketParams params, bool enabled);
@@ -216,6 +220,8 @@ contract StoxhomesPerps is IPerpsAccounting, Ownable2Step, Pausable, ReentrancyG
             m.shortSize += size;
             m.shortUnits += units;
         }
+        _open.add(id);
+        _byOwner[msg.sender].add(id);
         emit PositionOpened(id, msg.sender, market, isLong, collateral, size, price, fee);
     }
 
@@ -299,6 +305,24 @@ contract StoxhomesPerps is IPerpsAccounting, Ownable2Step, Pausable, ReentrancyG
         return marketIds.length;
     }
 
+    /// @notice Open position ids for a trader.
+    function positionsOf(address owner_) external view returns (uint256[] memory) {
+        return _byOwner[owner_].values();
+    }
+
+    function openPositionCount() external view returns (uint256) {
+        return _open.length();
+    }
+
+    /// @notice A page of open position ids, for keepers scanning for liquidations.
+    function openPositionIds(uint256 offset, uint256 limit) external view returns (uint256[] memory ids) {
+        uint256 n = _open.length();
+        if (offset >= n) return new uint256[](0);
+        uint256 end = offset + limit > n ? n : offset + limit;
+        ids = new uint256[](end - offset);
+        for (uint256 i = offset; i < end; ++i) ids[i - offset] = _open.at(i);
+    }
+
     /// @notice Unrealised PnL and accrued borrow fee at the current oracle price.
     function positionPnl(uint256 id) external view returns (int256 pnl, uint256 borrowFee) {
         Position memory pos = _positions[id];
@@ -370,6 +394,8 @@ contract StoxhomesPerps is IPerpsAccounting, Ownable2Step, Pausable, ReentrancyG
             m.shortSize -= pos.size;
             m.shortUnits -= pos.units;
         }
+        _open.remove(id);
+        _byOwner[pos.owner].remove(id);
         delete _positions[id];
     }
 

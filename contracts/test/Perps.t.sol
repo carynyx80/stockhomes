@@ -223,3 +223,27 @@ contract PerpsTest is Base {
         assertEq(totalUsdg(), start, "conservation");
     }
 }
+
+contract EnumerationTest is Base {
+    function test_TracksOpenPositionsByOwnerAndGlobally() public {
+        vm.startPrank(alice);
+        uint256 a = perps.open(NYC, true, 100 * U, 5, type(uint256).max);
+        uint256 b = perps.open(MIA, false, 100 * U, 5, 0);
+        vm.stopPrank();
+        vm.prank(bob);
+        uint256 c = perps.open(NYC, false, 100 * U, 5, 0);
+
+        assertEq(perps.positionsOf(alice).length, 2);
+        assertEq(perps.positionsOf(bob)[0], c);
+        assertEq(perps.openPositionCount(), 3);
+        uint256[] memory page = perps.openPositionIds(1, 10);
+        assertEq(page.length, 2);
+
+        vm.prank(alice);
+        perps.close(a, 0);
+        assertEq(perps.positionsOf(alice).length, 1);
+        assertEq(perps.positionsOf(alice)[0], b);
+        assertEq(perps.openPositionCount(), 2);
+        assertEq(perps.openPositionIds(5, 10).length, 0);
+    }
+}
