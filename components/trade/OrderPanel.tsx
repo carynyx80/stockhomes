@@ -10,7 +10,8 @@ const PRESETS = [2, 5, 10, 25, 50, 100];
 
 const SYMBOL = data.settlementSymbol ?? SETTLEMENT.symbol;
 
-export function OrderPanel({ market, quote, balance }: { market: Market; quote: Quote | null; balance: bigint | null }) {
+export function OrderPanel({ market, quote, balance, walletAddress }: { market: Market; quote: Quote | null; balance: bigint | null; walletAddress?: string | null }) {
+  const snapWallet = walletAddress ?? null;
   const [side, setSide] = useState<Side>("long");
   const [amount, setAmount] = useState("100");
   const [leverage, setLeverage] = useState(10);
@@ -108,7 +109,11 @@ export function OrderPanel({ market, quote, balance }: { market: Market; quote: 
             </button>
           </div>
           <p id="collateral-help" className="mt-1 text-xs text-short" aria-live="polite">
-            {invalid ? "Enter a plain amount, like 250 or 250.50." : insufficient ? "Not enough paper USDG for collateral plus fee." : ""}
+            {invalid ? "Enter a plain amount, like 250 or 250.50." : insufficient
+                ? data.mode === "live" && !snapWallet
+                  ? "Connect your wallet to trade."
+                  : `Not enough ${data.mode === "live" ? SYMBOL : "paper USDG"} for collateral plus fee.`
+                : ""}
           </p>
         </div>
 

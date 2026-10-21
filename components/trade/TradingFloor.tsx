@@ -76,7 +76,7 @@ export function TradingFloor() {
         </section>
 
         <div className="lg:col-span-2 xl:col-span-1">
-          <OrderPanel market={market} quote={quote} balance={snap?.account.balance ?? null} />
+          <OrderPanel market={market} quote={quote} balance={snap?.account.balance ?? null} walletAddress={snap?.wallet?.address} />
         </div>
       </div>
 

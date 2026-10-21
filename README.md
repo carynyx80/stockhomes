@@ -297,6 +297,40 @@ curl -H "Authorization: Bearer $CRON_SECRET" "https://YOUR-DOMAIN/api/cron/agent
 Phases B (battles, boarding-up visuals, portraits, TTS, Fireplace breakdown) and C (tokens, room staking, live
 wallets behind `OPEN_HOUSE_TOKENS=false`) aren't built yet.
 
+## 10c. The Stoxhomes exchange (contracts, testnet)
+
+Stoxhomes' own housing perps run on Robinhood Chain, settled in USDG: `contracts/` (`PriceOracle`, `StoxhomesVault`,
+`StoxhomesPerps`). **Testnet only. Not audited. Not on mainnet.** Addresses are in
+[docs/VERIFIED_CONTRACTS.md](docs/VERIFIED_CONTRACTS.md) and `config/exchange.ts`.
+
+- **Live markets:** New York, Miami and Los Angeles (S&P CoreLogic Case-Shiller via FRED) and London (UK HPI, HM Land
+  Registry). Dubai (official index stale since 2022) and Lagos (no credible index) stay simulated.
+- **The site:** `NEXT_PUBLIC_DATA_SOURCE=testnet` switches the Trading Floor and Vault to the contracts. Visitors
+  trade with their own wallet; the "Get 10,000 tUSDG" button mints test USDG once a day. City Wars stays a paper game.
+- **The keeper** (`/api/cron/keeper`, daily) posts oracle prices and liquidates under-margined positions. It needs
+  `KEEPER_PRIVATE_KEY` (the oracle publisher) and `KEEPER_DRY_RUN=false`. **Without it, testnet prices go stale after
+  2 days and trading pauses** until the next post.
+- **Mainnet blockers:**
+  - a professional audit
+  - a multisig (and ideally a timelock) as owner
+  - a **daily** licensed price feed: monthly indices are predictable and can be farmed with leverage
+  - an S&P licence for Case-Shiller data
+  - confirmed fees, margins and caps
+
+```bash
+cd contracts && forge test
+```
+
+```bash
+npm run test:fork
+```
+
+```bash
+npm run test:e2e:live
+```
+
+`ANVIL=1 npx vitest run test/exchange` runs the keeper against a local chain.
+
 ## 11. Risk disclosure
 
 This text also appears in the Library (`/docs#risks`).
