@@ -47,3 +47,17 @@ from that source, not assumed.
 - Universal Router 2.1.2's `ExactInputSingleParams` is
   `(PoolKey, bool zeroForOne, uint128 amountIn, uint128 amountOutMinimum, uint256 minHopPriceX36, bytes hookData)`.
   It has one more field than older v4-periphery releases. Native ETH input is settled from `msg.value`.
+
+## USDG (settlement asset for the Stoxhomes exchange)
+
+| Network | Address | How it was confirmed |
+|---|---|---|
+| Robinhood Chain mainnet (4663) | `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` | Paxos docs "USDG on Main Networks"; on-chain `name()` = "Global Dollar", `symbol()` = USDG, `decimals()` = 6, supply ≈ 690M |
+| Robinhood Chain testnet (46630) | `0x7E955252E15c84f5768B83c41a71F9eba181802F` | Paxos docs "USDG on Test Networks"; on-chain "Global Dollar" / USDG / 6 decimals |
+
+**Beware impostors:** the mainnet explorer lists at least eight tokens named "USDG". Only the address above is Paxos's.
+
+## Stoxhomes exchange contracts
+
+`contracts/` (PriceOracle, StoxhomesVault, StoxhomesPerps). **Not deployed anywhere yet.** They must be audited before any
+mainnet deployment, with the owner role held by a multisig.
