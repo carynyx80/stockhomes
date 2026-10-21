@@ -195,11 +195,14 @@ export function liveChain(client: PublicClient, c: NetworkContracts, token: Addr
     },
 
     async claim(asset) {
-      const hash = await needSigner().wallet.writeContract(
+      const call =
         asset === "eth"
-          ? { address: c.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "claim", args: [] }
-          : { address: c.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "claimToken", args: [token] },
-      );
+          ? ({ address: c.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "claim", args: [] } as const)
+          : ({ address: c.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "claimToken", args: [token] } as const);
+      // Headroom over the estimate, like the swap and burn: a claim zeroes a balance, and the storage refund can
+      // make a bare estimate too low to run.
+      const gas = await client.estimateContractGas({ ...call, account: account.address } as Parameters<PublicClient["estimateContractGas"]>[0]);
+      const hash = await needSigner().wallet.writeContract({ ...call, gas: (gas * 13n) / 10n } as Parameters<NonNullable<typeof wallet>["writeContract"]>[0]);
       try {
         const receipt = await client.waitForTransactionReceipt({ hash, timeout: 90_000 });
         if (receipt.status !== "success") throw new Error(`claim reverted: ${hash}`);

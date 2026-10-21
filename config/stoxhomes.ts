@@ -107,8 +107,12 @@ export const BOT = {
   minGasEth: "0.002",
   /** Skip a claim when its gas would cost more than this share of its value. */
   maxGasShareBps: 500,
-  /** Chainlink answer older than this is treated as unavailable. */
-  maxPriceAgeSeconds: 3 * 60 * 60,
+  /**
+   * Chainlink answer older than this is treated as unavailable. The Robinhood Chain ETH/USD feed updates on a
+   * 24-hour heartbeat (plus price moves), so routine gaps of 5-10 hours are normal. The price only gates the $100
+   * threshold and the gas check; the swap is protected by a live Uniswap quote, not by this price.
+   */
+  maxPriceAgeSeconds: 25 * 60 * 60,
   /** Swap transaction deadline. */
   swapDeadlineSeconds: 300,
   lockTtlSeconds: 240,

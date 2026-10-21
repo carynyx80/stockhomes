@@ -5,8 +5,8 @@ import {
   botSettings,
   creatorKey,
   databaseUrl,
-  network,
   payoutWalletAddress,
+  tokenNetwork,
   redisConfig,
   telegramConfig,
   tokenAddress,
@@ -26,7 +26,7 @@ export type BotSetup =
 
 /** Assembles the bot from env, refusing anything unsafe (live mode without a lock, a database or a key). */
 export function setupBot(): BotSetup {
-  const net = network();
+  const net = tokenNetwork();
   const s = botSettings();
   const notes: string[] = [];
 

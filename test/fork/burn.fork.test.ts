@@ -19,7 +19,7 @@ import {
   type Address,
   type PublicClient,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { robinhood } from "viem/chains";
 import { BOT, CONTRACTS } from "@/config/stoxhomes";
 import { erc20Abi, ponsEscrowAbi, ponsFactoryAbi } from "@/lib/abis";
@@ -30,8 +30,9 @@ const UPSTREAM = process.env.RPC_URL_MAINNET ?? "https://rpc.mainnet.chain.robin
 const TOKEN = (process.env.SAMPLE_TOKEN ?? "0x7F1D6332901622e1eA5728D12Bf866D5d1e1b6a8") as Address;
 const PORT = 8547;
 const FORK_URL = `http://127.0.0.1:${PORT}`;
-// Anvil's well-known dev account #0. Exists only on local test chains.
-const DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+// A fresh key per run, funded only on the fork. Never Anvil's public dev keys: on Robinhood Chain mainnet those
+// addresses carry EIP-7702 sweeper delegations that forward away any ETH they receive (seen 2026-10-21).
+const DEV_KEY = generatePrivateKey();
 const C = CONTRACTS.mainnet!;
 
 describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token", { timeout: 600_000 }, () => {
@@ -59,6 +60,7 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
     // Point the app's env at the fork, with the dev key as the payout wallet.
     Object.assign(process.env, {
       NETWORK: "mainnet",
+      TOKEN_NETWORK: "mainnet",
       RPC_URL_MAINNET: FORK_URL,
       TOKEN_ADDRESS: TOKEN,
       CREATOR_PRIVATE_KEY: DEV_KEY,
@@ -70,6 +72,7 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
     }
 
     const test = createTestClient({ chain: robinhood, mode: "anvil", transport: http(FORK_URL) });
+    await test.setBalance({ address: dev.address, value: parseEther("1") });
     const launch = await client.readContract({ address: C.ponsFactory, abi: ponsFactoryAbi, functionName: "getLaunchedToken", args: [TOKEN] });
     const owner = launch.creatorFeeRecipient;
     await test.impersonateAccount({ address: owner });
@@ -103,6 +106,7 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
   it("burns exactly the tokens it bought, with 20% of exactly what it claimed", async () => {
     const dead = BOT.deadAddress as Address;
     const deadBefore = await client.readContract({ address: TOKEN, abi: erc20Abi, functionName: "balanceOf", args: [dead] });
+    const ethBefore = await client.getBalance({ address: dev.address });
     const escrowBefore = await client.readContract({ address: C.ponsFeeEscrow, abi: ponsEscrowAbi, functionName: "balanceOf", args: [dev.address] });
     expect(escrowBefore).toBe(parseEther("0.2"));
 
@@ -141,6 +145,13 @@ describe.skipIf(!enabled)("fork: claim → swap → burn on a real Pons V2 token
     expect(deadAfter - deadBefore).toBe(o.tokensBought); // dead address up by exactly the bought amount
     expect(o.burnedAmount).toBe(o.tokensBought);
     expect(devLeft).toBe(0n);
+
+    // The other 80% stays in the payout wallet: +0.2 claimed −0.04 swapped, minus only gas (cents on this chain).
+    const ethAfter = await client.getBalance({ address: dev.address });
+    const kept = ethAfter - ethBefore;
+    expect(kept <= parseEther("0.16")).toBe(true);
+    expect(kept > parseEther("0.16") - parseEther("0.0005")).toBe(true);
+    if (process.env.FORK_VERBOSE) console.log({ keptWei: kept, gasWei: parseEther("0.16") - kept });
     if (process.env.FORK_VERBOSE) console.log({ deadBefore, deadAfter, delta: deadAfter - deadBefore, tokensBought: o.tokensBought, owedWei: o.owedAmount });
   });
 });

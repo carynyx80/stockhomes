@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { BOT } from "@/config/stoxhomes";
 import { runOnce } from "@/lib/bot/engine";
 import { setupBot } from "@/lib/bot";
-import { cronSecret, network } from "@/lib/env";
+import { cronSecret, tokenNetwork } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       try {
         const now = new Date();
         await store.recordRun({
-          network: network(),
+          network: tokenNetwork(),
           dryRun: true,
           startedAt: now,
           finishedAt: now,

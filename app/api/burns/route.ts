@@ -4,7 +4,7 @@ import { BOT, TOKEN } from "@/config/stoxhomes";
 import { erc20Abi } from "@/lib/abis";
 import { burnsSummary } from "@/lib/bot/store-pg";
 import { activeChain, contracts, publicClient } from "@/lib/chain";
-import { databaseUrl, feeCronIntervalMinutes, network, tokenAddress } from "@/lib/env";
+import { databaseUrl, feeCronIntervalMinutes, tokenAddress, tokenNetwork } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function GET() {
   const supply = TOKEN.totalSupply * 10n ** BigInt(TOKEN.decimals);
   const base: BurnsResponse = {
     status: token ? "live" : "not-launched",
-    network: network(),
+    network: tokenNetwork(),
     ticker: TOKEN.ticker,
     explorer: activeChain().blockExplorers!.default.url,
     token,

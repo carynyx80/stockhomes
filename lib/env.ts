@@ -35,7 +35,21 @@ export function network(): Network {
 }
 
 export function rpcUrl(): string | undefined {
-  return network() === "mainnet" ? str("RPC_URL_MAINNET") : str("RPC_URL_TESTNET");
+  return rpcUrlFor(network());
+}
+
+export function rpcUrlFor(net: Network): string | undefined {
+  return net === "mainnet" ? str("RPC_URL_MAINNET") : str("RPC_URL_TESTNET");
+}
+
+/**
+ * The chain the $STOXH token lives on, for the fee bot and the burn ledger. Separate from NETWORK (which picks the
+ * exchange deployment the keeper and site trade on), so the testnet exchange and the mainnet token can run side by side.
+ */
+export function tokenNetwork(): Network {
+  const n = (str("TOKEN_NETWORK") ?? "mainnet").toLowerCase();
+  if (n !== "mainnet" && n !== "testnet") throw new Error("TOKEN_NETWORK must be 'mainnet' or 'testnet'");
+  return n;
 }
 
 export function tokenAddress(): Address | null {
