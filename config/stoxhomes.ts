@@ -100,7 +100,8 @@ export const BOT = {
   /** Swap transaction deadline. */
   swapDeadlineSeconds: 300,
   lockTtlSeconds: 240,
-  cronIntervalMinutes: 10,
+  /** Matches the fee cron in vercel.json: daily at 12:00 UTC on Vercel Hobby. On Pro, set 10 here and every-10-minutes there. */
+  cronIntervalMinutes: 1440,
   /** Upper bound on blocks scanned per run when looking for claims made outside the bot. */
   maxLogScanBlocks: 50_000n,
   /** Gas units assumed for steps that can't be estimated before the previous one lands. */
