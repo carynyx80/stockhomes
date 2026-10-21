@@ -8,6 +8,8 @@ import { distanceToLiquidationBps, feeOf, liquidationPrice, notionalOf } from "@
 
 const PRESETS = [2, 5, 10, 25, 50, 100];
 
+const SYMBOL = data.settlementSymbol ?? SETTLEMENT.symbol;
+
 export function OrderPanel({ market, quote, balance }: { market: Market; quote: Quote | null; balance: bigint | null }) {
   const [side, setSide] = useState<Side>("long");
   const [amount, setAmount] = useState("100");
@@ -100,7 +102,7 @@ export function OrderPanel({ market, quote, balance }: { market: Market; quote: 
               aria-describedby="collateral-help"
               className="numeric w-full min-w-0 bg-transparent px-3 py-2.5 text-base outline-none"
             />
-            <span className="numeric px-2 text-xs text-ink/60">{SETTLEMENT.symbol}</span>
+            <span className="numeric px-2 text-xs text-ink/60">{SYMBOL}</span>
             <button type="button" onClick={setMax} className="mr-1.5 rounded-sm px-2 py-1 text-xs text-wine hover:bg-parchment">
               Max
             </button>

@@ -140,6 +140,9 @@ export function Parlour() {
             <h2 id="round-heading" className="editorial mt-1 text-3xl text-oxblood">
               This week&rsquo;s City Wars
             </h2>
+            {data.mode === "live" && (
+              <p className="mt-1 max-w-xl text-xs text-brass">City Wars remain a paper game: stakes use your paper balance, not tokens.</p>
+            )}
             <p className="mt-1 max-w-xl text-sm text-ink/70">
               Back the city whose home-price index rises more by Monday 00:00 UTC. Winners are paid{" "}
               <span className="numeric">{SIMULATED.wars.payoutMultiplier}×</span> their stake.

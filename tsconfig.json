@@ -33,11 +33,13 @@
     "**/*.tsx",
     ".next-e2e/types/**/*.ts",
     ".next/types/**/*.ts",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    ".next-live/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     ".next-e2e",
-    "contracts"
+    "contracts",
+    ".next-live"
   ]
 }

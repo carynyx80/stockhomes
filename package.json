@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "test": "vitest run",
     "test:fork": "FORK=1 vitest run test/fork --hookTimeout=600000",
-    "test:mainnet-reads": "MAINNET_READS=1 vitest run lib/bot/mainnet.read.test.ts"
+    "test:mainnet-reads": "MAINNET_READS=1 vitest run lib/bot/mainnet.read.test.ts",
+    "test:e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",

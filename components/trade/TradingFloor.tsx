@@ -7,6 +7,7 @@ import { useHistory, useSnapshot } from "@/lib/data/hooks";
 import { formatBps, formatPrice, toNumber } from "@/lib/format";
 import { DECIMALS } from "@/config/stoxhomes";
 import { marketById } from "@/lib/sim/markets";
+import { ORACLE_MARKETS } from "@/config/oracle";
 import { MarketList } from "./MarketList";
 import { OrderPanel } from "./OrderPanel";
 import { Positions } from "./Positions";
@@ -18,7 +19,7 @@ const usd0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
 export function TradingFloor() {
   const snap = useSnapshot();
-  const [marketId, setMarketId] = useState("nyc");
+  const [marketId, setMarketId] = useState(data.markets[0]?.id ?? "nyc");
   const [range, setRange] = useState<HistoryRange>("1W");
   const market = marketById(marketId);
   const quote = snap?.quotes[marketId] ?? null;
@@ -54,7 +55,11 @@ export function TradingFloor() {
                   </span>
                 )}
               </p>
-              <p className="mt-1 text-xs text-ink/55">Simulated home-price index, USD</p>
+              <p className="mt-1 text-xs text-ink/55">
+                {data.mode === "live"
+                  ? `On-chain oracle price · ${ORACLE_MARKETS.find((m) => m.id === marketId)?.source.label ?? "index"}`
+                  : "Simulated home-price index, USD"}
+              </p>
             </div>
             <RangeTabs ranges={RANGES} value={range} onChange={setRange} label="Chart range" />
           </div>

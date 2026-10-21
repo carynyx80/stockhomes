@@ -127,8 +127,18 @@ export type WarsState = {
   leaderboard: LeaderRow[];
 };
 
+export type WalletInfo = {
+  /** A browser wallet is installed. */
+  available: boolean;
+  address: string | null;
+  /** Connected to the exchange's chain. */
+  chainOk: boolean;
+};
+
 export type Snapshot = {
   now: number;
+  /** Present for on-chain sources only. */
+  wallet?: WalletInfo;
   quotes: Record<string, Quote>;
   account: Account;
   vault: VaultStats;
@@ -147,6 +157,16 @@ export interface TradingAccount {
 
 export interface DataSource extends TradingAccount {
   readonly mode: DataMode;
+  /** For on-chain sources: "testnet" or "mainnet". */
+  readonly network?: "testnet" | "mainnet";
+  /** Symbol of the settlement token as shown to users (USDG, or tUSDG on testnet). */
+  readonly settlementSymbol?: string;
+  /** Explorer base URL for transaction links. */
+  readonly explorer?: string;
+  /** On-chain sources: connect a browser wallet. */
+  connectWallet?(): Promise<void>;
+  /** Testnet only: mint test USDG from the faucet. */
+  faucet?(): Promise<void>;
   readonly markets: readonly Market[];
 
   /** Snapshot store for useSyncExternalStore. The listener fires on every price tick or state change. */

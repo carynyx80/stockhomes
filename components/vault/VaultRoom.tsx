@@ -22,6 +22,8 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
   );
 }
 
+const SYMBOL = data.settlementSymbol ?? SETTLEMENT.symbol;
+
 export function VaultRoom() {
   const snap = useSnapshot();
   const [range, setRange] = useState<HistoryRange>("6M");
@@ -50,13 +52,13 @@ export function VaultRoom() {
     try {
       if (tab === "deposit") {
         await data.deposit(parsed);
-        setMessage({ kind: "ok", text: `Deposited ${formatUsdg(parsed)} ${SETTLEMENT.symbol}.` });
+        setMessage({ kind: "ok", text: `Deposited ${formatUsdg(parsed)} ${SYMBOL}.` });
       } else {
         // Withdraw by value: convert to shares, and take every share when asking for (about) the whole holding.
         let shares = (parsed * PRICE_ONE) / v.sharePrice;
         if (holdingValue != null && parsed >= holdingValue) shares = holding.shares;
         await data.withdraw(shares);
-        setMessage({ kind: "ok", text: `Withdrew ${formatUsdg((shares * v.sharePrice) / PRICE_ONE)} ${SETTLEMENT.symbol}.` });
+        setMessage({ kind: "ok", text: `Withdrew ${formatUsdg((shares * v.sharePrice) / PRICE_ONE)} ${SYMBOL}.` });
       }
       setAmount("");
     } catch (err) {
@@ -71,9 +73,9 @@ export function VaultRoom() {
   return (
     <>
       <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Pool size" value={v ? `${formatUsdgCompact(v.tvl)}` : "—"} note={`${SETTLEMENT.symbol} in the House`} />
-        <Stat label="Share price" value={v ? formatFixed(v.sharePrice, DECIMALS.price, 4) : "—"} note={`${SETTLEMENT.symbol} per share`} />
-        <Stat label="7-day APR" value={v ? formatBps(v.apr7dBps, 1, false) : "—"} note="Annualised from the last 7 days" />
+        <Stat label="Pool size" value={v ? `${formatUsdgCompact(v.tvl)}` : "—"} note={`${SYMBOL} in the House`} />
+        <Stat label="Share price" value={v ? formatFixed(v.sharePrice, DECIMALS.price, 4) : "—"} note={`${SYMBOL} per share`} />
+        <Stat label="7-day APR" value={v && data.mode !== "live" ? formatBps(v.apr7dBps, 1, false) : "—"} note={data.mode === "live" ? "Available after a week of history" : "Annualised from the last 7 days"} />
         <Stat label="Utilisation" value={v ? formatBps(v.utilizationBps, 1, false) : "—"} note="Pool backing open positions" />
       </div>
 
@@ -189,7 +191,7 @@ export function VaultRoom() {
                   onChange={(e) => setAmount(e.target.value)}
                   className="numeric w-full min-w-0 bg-transparent px-3 py-2.5 text-base outline-none"
                 />
-                <span className="numeric px-2 text-xs text-ink/60">{SETTLEMENT.symbol}</span>
+                <span className="numeric px-2 text-xs text-ink/60">{SYMBOL}</span>
                 <button
                   type="button"
                   onClick={() => max != null && setAmount(formatUsdg(max).replace(/,/g, ""))}
