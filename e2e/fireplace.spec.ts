@@ -27,8 +27,9 @@ test("fireplace shows the ledger and flares when a new burn arrives", async ({ p
   await page.route("**/api/burns", (route: Route) => route.fulfill({ json: body }));
 
   await page.goto("/burn");
-  await expect(page.getByText("1,250,000", { exact: true })).toBeVisible();
-  await expect(page.getByText("0.1250%")).toBeVisible();
+  // The headline adds the bot's burns to the recorded first burn (3,000,000).
+  await expect(page.getByText("4,250,000", { exact: true })).toBeVisible();
+  await expect(page.getByText("0.4250%")).toBeVisible();
   await expect(page.getByRole("link", { name: /0x000000…000001/ })).toHaveAttribute(
     "href",
     `https://robinhoodchain.blockscout.com/tx/${burn(1, "0").txHash}`,
@@ -37,18 +38,23 @@ test("fireplace shows the ledger and flares when a new burn arrives", async ({ p
 
   body = { ...body, totalBurned: "1300000000000000000000000", burns: [burn(2, "50000000000000000000000"), ...body.burns] };
   await page.clock.fastForward(31_000);
-  await expect(page.getByText("1,300,000", { exact: true })).toBeVisible();
+  await expect(page.getByText("4,300,000", { exact: true })).toBeVisible();
   await expect(page.locator(".hearth-flames")).toHaveClass(/is-flaring/);
 });
 
-test("fireplace before the first burn shows a cold hearth and the contract address", async ({ page }) => {
+test("fireplace shows the recorded first burn, with its transaction, before the bot runs", async ({ page }) => {
   await page.route("**/api/burns", (route) =>
     route.fulfill({ json: { ...base, status: "not-launched", token: null, onChainDeadBalance: null, totalBurned: "0", burns: [] } }),
   );
   await page.goto("/burn");
-  await expect(page.getByText("No burns yet")).toBeVisible();
+  await expect(page.getByText("$STOXH burned", { exact: true })).toBeVisible();
+  await expect(page.getByText("3,000,000", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("0.3000%")).toBeVisible();
+  const link = page.getByRole("link", { name: /First burn: 3,000,000/ });
+  await expect(link).toHaveAttribute("href", "https://robin.etherscan.io/tx/0x461a703959069ad0f801c2f2b35bdb5a03602fc51deaa9d58b20bfccd0027b13");
+  await expect(page.getByText("21 Oct 2026, 07:29 UTC")).toBeVisible();
+  await expect(page.locator(".hearth-flames")).not.toHaveClass(/is-out/);
   await expect(page.getByText("0x5DF76B1eEb1F83dF875d4798284feE41E49801C4").first()).toBeVisible();
-  await expect(page.locator(".hearth-flames")).toHaveClass(/is-out/);
 });
 
 test("burn and cron endpoints: public read, protected trigger", async ({ request }) => {

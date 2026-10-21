@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ContractAddress } from "@/components/token/ContractAddress";
 import type { BurnsResponse } from "@/app/api/burns/route";
-import { TOKEN } from "@/config/stoxhomes";
+import { RECORDED_BURNS, TOKEN } from "@/config/stoxhomes";
 import { formatCountdown, formatFixed } from "@/lib/format";
 import { useNow } from "@/lib/useNow";
 import { Hearth } from "./Hearth";
 
 const POLL_MS = 30_000;
 const when = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const whenUtc = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 
 const tokens = (base: string, dp = 0) => formatFixed(BigInt(base), TOKEN.decimals, dp);
 const ethAmt = (wei: string) => formatFixed(BigInt(wei), 18, 4);
@@ -18,6 +19,10 @@ function pctOfSupply(base: string, supply: string) {
   return s === 0n ? "0.0000" : formatFixed((BigInt(base) * 1_000_000n) / s, 4, 4); // 4dp percentage
 }
 const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-6)}`;
+const UNIT = 10n ** BigInt(TOKEN.decimals);
+/** Burns made outside the bot (config/stoxhomes.ts), in base units. */
+const RECORDED_TOTAL = RECORDED_BURNS.reduce((sum, b) => sum + b.amountTokens * UNIT, 0n);
+const SUPPLY = (TOKEN.totalSupply * UNIT).toString();
 
 function Tile({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
@@ -65,23 +70,35 @@ export function FireplaceRoom() {
     };
   }, []);
 
-  const lit = data?.status === "live";
-  const burned = data?.totalBurned ?? "0";
+  const botLive = data?.status === "live";
+  // Bot burns plus burns recorded by hand; the fire is lit as soon as anything has burned.
+  const burned = (BigInt(data?.totalBurned ?? "0") + RECORDED_TOTAL).toString();
+  const lit = botLive || RECORDED_TOTAL > 0n;
+  const supply = data?.totalSupply ?? SUPPLY;
+  const firstBurn = RECORDED_BURNS[0];
 
   return (
     <div className="pt-10">
       <section aria-labelledby="burned-heading" className="mx-auto max-w-2xl text-center">
         <p id="burned-heading" className="text-xs font-semibold uppercase tracking-[0.22em] text-brass">
-          {lit ? `${TOKEN.ticker} burned by the buyback` : "No burns yet"}
+          {lit ? `${TOKEN.ticker} burned` : "No burns yet"}
         </p>
         <p className="numeric mt-3 text-[clamp(2.4rem,8vw,4.5rem)] leading-none text-oxblood" aria-live="polite">
-          {data ? tokens(burned) : "—"}
+          {data || lit ? tokens(burned) : "—"}
         </p>
         <p className="mt-2 text-sm text-ink/65">
           {lit ? (
             <>
-              <span className="numeric">{pctOfSupply(burned, data!.totalSupply)}%</span> of the{" "}
+              <span className="numeric">{pctOfSupply(burned, supply)}%</span> of the{" "}
               <span className="numeric">1,000,000,000</span> supply, sent to the dead address forever.
+              {firstBurn && (
+                <>
+                  {" "}
+                  <a href={firstBurn.url} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-wine underline underline-offset-2 hover:text-oxblood">
+                    {firstBurn.label}: {firstBurn.amountTokens.toLocaleString("en-US")} {TOKEN.ticker} ↗
+                  </a>
+                </>
+              )}
             </>
           ) : (
             <>{TOKEN.ticker} is live. Every buyback will burn here, live.</>
@@ -102,7 +119,7 @@ export function FireplaceRoom() {
       <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Tile
           label="At the dead address"
-          value={data?.onChainDeadBalance != null ? tokens(data.onChainDeadBalance) : "—"}
+          value={data?.onChainDeadBalance != null ? tokens(data.onChainDeadBalance) : RECORDED_TOTAL > 0n ? tokens(RECORDED_TOTAL.toString()) : "—"}
           note="Read on-chain, includes any other burns"
         />
         <Tile label="Creator fees claimed" value={data ? `${ethAmt(data.totalClaimedWei)} ETH` : "—"} note="20% of each claim is burned" />
@@ -118,18 +135,30 @@ export function FireplaceRoom() {
         <h2 id="latest-heading" className="editorial text-2xl text-oxblood">
           Latest burns
         </h2>
-        {!data || data.burns.length === 0 ? (
-          <p className="py-6 text-sm text-ink/60">{lit ? "No burns yet. The first lands when creator fees pass $100." : "Nothing has burned yet."}</p>
+        {(data?.burns.length ?? 0) === 0 && RECORDED_BURNS.length === 0 ? (
+          <p className="py-6 text-sm text-ink/60">{botLive ? "No burns yet. The first lands when creator fees pass $100." : "Nothing has burned yet."}</p>
         ) : (
           <ul className="mt-3 divide-y divide-sand/70">
-            {data.burns.map((b) => (
+            {RECORDED_BURNS.map((b) => (
+              <li key={b.tx} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
+                <span className="numeric text-ink">
+                  {b.amountTokens.toLocaleString("en-US")} <span className="text-ink/55">{TOKEN.ticker}</span>
+                  <span className="ml-2 rounded-sm bg-oxblood px-1.5 py-0.5 align-middle font-sans text-[10px] font-semibold uppercase tracking-wider text-beige">{b.label}</span>
+                </span>
+                <span className="text-xs text-ink/60">{whenUtc.format(new Date(b.at))} UTC</span>
+                <a href={b.url} target="_blank" rel="noopener noreferrer" className="numeric text-xs text-wine underline-offset-4 hover:underline">
+                  {short(b.tx)} ↗
+                </a>
+              </li>
+            ))}
+            {(data?.burns ?? []).map((b) => (
               <li key={b.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
                 <span className="numeric text-ink">
                   {tokens(b.amount)} <span className="text-ink/55">{TOKEN.ticker}</span>
                 </span>
                 <span className="text-xs text-ink/60">{when.format(new Date(b.at))}</span>
                 <a
-                  href={`${data.explorer}/tx/${b.txHash}`}
+                  href={`${data!.explorer}/tx/${b.txHash}`}
                   target="_blank"
                   rel="noreferrer"
                   className="numeric text-xs text-wine underline-offset-4 hover:underline"

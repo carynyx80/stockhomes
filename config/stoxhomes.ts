@@ -22,6 +22,20 @@ export const TOKEN = {
   explorer: "https://robinhoodchain.blockscout.com/token/0x5DF76B1eEb1F83dF875d4798284feE41E49801C4",
 } as const;
 
+/**
+ * Burns made outside the fee bot, shown in the Fireplace. Each one verified on-chain before listing
+ * (a successful $STOXH Transfer to 0x…dEaD for exactly this amount).
+ */
+export const RECORDED_BURNS: { label: string; tx: `0x${string}`; amountTokens: bigint; at: string; url: string }[] = [
+  {
+    label: "First burn",
+    tx: "0x461a703959069ad0f801c2f2b35bdb5a03602fc51deaa9d58b20bfccd0027b13",
+    amountTokens: 3_000_000n,
+    at: "2026-10-21T07:29:16Z",
+    url: "https://robin.etherscan.io/tx/0x461a703959069ad0f801c2f2b35bdb5a03602fc51deaa9d58b20bfccd0027b13",
+  },
+];
+
 /** Official social accounts, linked in the footer. */
 export const SOCIALS = {
   x: { handle: "@Stoxhomes", url: "https://x.com/Stoxhomes" },
