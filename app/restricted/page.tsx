@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
 
 export const metadata: Metadata = { title: "Not available in your region", robots: { index: false } };
 
 export default function Restricted() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-4 py-16">
-      <p className="display text-3xl text-oxblood">STOXHOMES</p>
+      <Logo className="w-56" priority />
       <h1 className="editorial mt-8 text-4xl text-oxblood">This room is closed to you.</h1>
       <p className="mt-4 leading-relaxed text-ink/80">
         Leveraged derivatives are regulated where you appear to be, so trading and the Vault are not available

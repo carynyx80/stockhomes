@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogoInline } from "@/components/brand/Logo";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ROOMS } from "@/lib/rooms";
@@ -32,8 +33,8 @@ export function BrassRail() {
           aria-label="Rooms"
           className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6"
         >
-          <Link href="/" className="display text-xl text-oxblood sm:text-2xl" aria-label="Stoxhomes, the foyer">
-            STOXHOMES
+          <Link href="/" className="shrink-0" aria-label="Stoxhomes, the foyer">
+            <LogoInline />
           </Link>
 
           <ul className="hidden items-center gap-6 xl:flex">

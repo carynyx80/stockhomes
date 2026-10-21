@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Logo } from "@/components/brand/Logo";
 
 export const metadata: Metadata = { title: "Style guide", robots: { index: false } };
 
@@ -42,7 +43,7 @@ export default function StyleGuide() {
         <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-brass">Type</h2>
         <div>
           <p className="text-xs text-ink/50">Gloock · display</p>
-          <p className="display text-7xl text-oxblood">STOXHOMES</p>
+          <Logo className="w-full max-w-xl" />
         </div>
         <div>
           <p className="text-xs text-ink/50">Fraunces italic, SOFT 100, WONK 1 · room names</p>

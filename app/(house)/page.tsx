@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
 import { BRAND, SETTLEMENT, TRADING } from "@/config/stoxhomes";
 import { ROOMS } from "@/lib/rooms";
 
@@ -15,6 +16,7 @@ export default function Foyer() {
           </h1>
         </div>
         <div className="max-w-md lg:pb-3">
+          <Logo className="mb-6 w-64 sm:w-80" priority />
           <p className="editorial text-2xl leading-snug text-wine sm:text-3xl">{BRAND.tagline}</p>
           <p className="mt-4 text-ink/75">
             Perpetuals on home prices in New York, Miami, London, Dubai and more. Up to{" "}
